@@ -1,0 +1,144 @@
+package app.agenda.data
+
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.graphics.Color
+import android.provider.CalendarContract
+import android.provider.CalendarContract.Instances
+import androidx.core.content.ContextCompat
+import app.agenda.domain.AgendaSettings
+import app.agenda.domain.CalEvent
+import app.agenda.domain.CalInfo
+import app.agenda.domain.Dedupe
+import app.agenda.domain.EventFilter
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.ZoneOffset
+
+/** What the widget draws, plus when it next needs redrawing. */
+data class Snapshot(
+    val settings: AgendaSettings,
+    val result: Dedupe,
+    val nextChangeMillis: Long,
+)
+
+class CalendarRepository(private val context: Context) {
+    fun hasPermission() =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) ==
+            PackageManager.PERMISSION_GRANTED
+
+    suspend fun calendars(): List<CalInfo> =
+        withContext(Dispatchers.IO) {
+            if (!hasPermission()) return@withContext emptyList()
+            val projection =
+                arrayOf(
+                    CalendarContract.Calendars._ID,
+                    CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
+                    CalendarContract.Calendars.ACCOUNT_NAME,
+                    CalendarContract.Calendars.CALENDAR_COLOR,
+                )
+            val out = mutableListOf<CalInfo>()
+            context.contentResolver.query(
+                CalendarContract.Calendars.CONTENT_URI,
+                projection,
+                "${CalendarContract.Calendars.VISIBLE} = 1",
+                null,
+                "${CalendarContract.Calendars.ACCOUNT_NAME}, ${CalendarContract.Calendars.CALENDAR_DISPLAY_NAME}",
+            )?.use { c ->
+                while (c.moveToNext()) {
+                    out += CalInfo(c.getLong(0), c.getString(1).orEmpty(), c.getString(2).orEmpty(), c.getInt(3))
+                }
+            }
+            out
+        }
+
+    /** Raw instances overlapping [fromMillis, toMillis), before any filtering. */
+    suspend fun events(
+        fromMillis: Long,
+        toMillis: Long,
+        zone: ZoneId,
+        hideDeclined: Boolean,
+    ): List<CalEvent> =
+        withContext(Dispatchers.IO) {
+            if (!hasPermission()) return@withContext emptyList()
+            val uri =
+                Instances.CONTENT_URI.buildUpon()
+                    .appendPath(fromMillis.toString())
+                    .appendPath(toMillis.toString())
+                    .build()
+            val projection =
+                arrayOf(
+                    Instances.EVENT_ID,
+                    Instances.CALENDAR_ID,
+                    Instances.TITLE,
+                    Instances.BEGIN,
+                    Instances.END,
+                    Instances.ALL_DAY,
+                    Instances.EVENT_LOCATION,
+                    Instances.DESCRIPTION,
+                    Instances.EVENT_COLOR,
+                    Instances.CALENDAR_COLOR,
+                    Instances.SELF_ATTENDEE_STATUS,
+                )
+            val out = mutableListOf<CalEvent>()
+            context.contentResolver.query(uri, projection, null, null, "${Instances.BEGIN} ASC")?.use { c ->
+                while (c.moveToNext()) {
+                    if (hideDeclined && c.getInt(10) == CalendarContract.Attendees.ATTENDEE_STATUS_DECLINED) continue
+                    val allDay = c.getInt(5) == 1
+                    var begin = c.getLong(3)
+                    var end = c.getLong(4)
+                    if (allDay) {
+                        // All-day instances are stored as UTC midnights; shift to the same dates in local time.
+                        begin = utcDateToLocalMillis(begin, zone)
+                        end = utcDateToLocalMillis(end, zone)
+                    }
+                    val color = c.getInt(8).takeIf { it != 0 } ?: c.getInt(9).takeIf { it != 0 } ?: Color.GRAY
+                    out +=
+                        CalEvent(
+                            id = c.getLong(0),
+                            calendarId = c.getLong(1),
+                            title = c.getString(2).orEmpty().ifBlank { "(No title)" },
+                            beginMillis = begin,
+                            endMillis = end,
+                            allDay = allDay,
+                            location = c.getString(6).orEmpty(),
+                            description = c.getString(7).orEmpty(),
+                            color = color,
+                        )
+                }
+            }
+            out
+        }
+
+    suspend fun snapshot(
+        settings: AgendaSettings = SettingsStore(context).load(),
+        now: Long = System.currentTimeMillis(),
+    ): Snapshot {
+        val zone = ZoneId.systemDefault()
+        val start = LocalDate.now(zone).atStartOfDay(zone)
+        val raw =
+            events(
+                start.toInstant().toEpochMilli(),
+                start.plusDays(settings.daysAhead.toLong()).toInstant().toEpochMilli(),
+                zone,
+                settings.hideDeclined,
+            )
+        return Snapshot(
+            settings,
+            EventFilter.apply(raw, settings, now),
+            EventFilter.nextChange(raw, settings, now, zone),
+        )
+    }
+
+    private fun utcDateToLocalMillis(
+        utcMillis: Long,
+        zone: ZoneId,
+    ): Long {
+        val date = Instant.ofEpochMilli(utcMillis).atOffset(ZoneOffset.UTC).toLocalDate()
+        return date.atStartOfDay(zone).toInstant().toEpochMilli()
+    }
+}

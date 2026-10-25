@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Shortcuts for building and previewing Agenda. Available as `agenda <cmd>` via
+# direnv (.envrc does PATH_add scripts) whenever you're in this project dir.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# Single source of truth for what each command does, so the Nix dev shell
+# banner can print this instead of keeping its own copy that drifts.
+help() {
+  cat <<'EOF'
+  agenda build      ./gradlew assembleDebug
+  agenda install    ./gradlew installDebug      (phone or emulator connected over adb)
+  agenda avd        create the emulator once
+  agenda emulator   launch it
+  agenda run        installDebug, then launch the app on the connected device
+  agenda release X.Y.Z   tag and push a release (CI builds and publishes it)
+EOF
+}
+
+case "${1:-}" in
+  build)
+    ./gradlew assembleDebug
+    ;;
+  install)
+    ./gradlew installDebug
+    ;;
+  avd)
+    avdmanager create avd -n agenda \
+      -k "system-images;android-35;google_apis_playstore;x86_64" -d pixel_6
+    ;;
+  emulator)
+    ANDROID_AVD_HOME="$HOME/.local/share/android/avd" emulator -avd agenda
+    ;;
+  run)
+    ./gradlew installDebug
+    adb shell monkey -p app.agenda -c android.intent.category.LAUNCHER 1
+    ;;
+  help)
+    help
+    ;;
+  release)
+    version="${2:-}"
+    if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      echo "usage: agenda release X.Y.Z" >&2
+      exit 1
+    fi
+    if [[ -n "$(git status --porcelain)" ]]; then
+      echo "working tree is dirty, commit or stash first" >&2
+      exit 1
+    fi
+    tag="v$version"
+    git tag -a "$tag" -m "$tag"
+    git push origin "$tag"
+    echo "pushed $tag, CI will build and publish the signed release"
+    ;;
+  *)
+    echo "usage: agenda {build|install|avd|emulator|run|release|help}" >&2
+    exit 1
+    ;;
+esac
