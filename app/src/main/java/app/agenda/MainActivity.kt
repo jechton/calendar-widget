@@ -467,7 +467,23 @@ private fun AccountGroup(
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         headlineContent = { Text(account) },
         supportingContent = { Text("$shown of ${cals.size} shown") },
-        trailingContent = { Icon(if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null) },
+        trailingContent = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                AgendaSwitch(shown > 0) { show ->
+                    val ids = cals.map { it.id }.toSet()
+                    edit {
+                        it.copy(
+                            hiddenCalendarIds = if (show) it.hiddenCalendarIds - ids else it.hiddenCalendarIds + ids,
+                        )
+                    }
+                }
+                Icon(
+                    if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    null,
+                    Modifier.padding(start = 8.dp),
+                )
+            }
+        },
     )
     if (open) cals.forEach { CalendarRow(it, s, edit) }
 }
