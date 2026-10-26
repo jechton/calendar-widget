@@ -136,4 +136,22 @@ class EventFilterTest {
         val g = EventFilter.groupByDay(listOf(holiday), from, 7, zone)
         assertEquals(listOf(from, from.plusDays(1)), g.keys.toList())
     }
+
+    fun dimmingHasItsOwnCutoffAndSchedulesARedraw() {
+        val s = AgendaSettings(dimFinished = true, dimOffsetMinutes = 30, hideOffsetMinutes = 120)
+        val e = ev("Lunch", begin = 10 * hour, end = 12 * hour)
+        assertFalse(EventFilter.isDimmed(e, s, 12 * hour))
+        assertTrue(EventFilter.isDimmed(e, s, 12 * hour + 30 * 60_000L))
+        assertFalse(EventFilter.isFinished(e, s, 12 * hour + 30 * 60_000L))
+        assertEquals(12 * hour + 30 * 60_000L, EventFilter.nextChange(listOf(e), s, 11 * hour, zone))
+    }
+
+    @Test
+    fun joinLinkAndDetailAreExtracted() {
+        val e =
+            ev("Sync", location = "Room 2", description = "<p>Agenda notes</p>\nhttps://meet.google.com/abc-defg-hij")
+        assertEquals("https://meet.google.com/abc-defg-hij", e.joinUrl())
+        assertEquals("Agenda notes", e.detail())
+        assertEquals(null, ev("Dinner", location = "https://example.com/x").joinUrl())
+    }
 }

@@ -79,6 +79,12 @@ object EventFilter {
         return !e.allDay && now >= e.endMillis + offset * MINUTE
     }
 
+    fun isDimmed(
+        e: CalEvent,
+        s: AgendaSettings,
+        now: Long,
+    ) = s.dimFinished && !e.allDay && now >= e.endMillis + s.dimOffsetMinutes * MINUTE
+
     /** Hidden calendars, declined events and finished events, then duplicates. */
     fun apply(
         events: List<CalEvent>,
@@ -98,11 +104,14 @@ object EventFilter {
         zone: ZoneId,
     ): Long {
         val midnight = LocalDate.now(zone).plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
-        val hides =
-            events.filter { !it.allDay }.mapNotNull { e ->
-                hideAfterMinutes(e, s)?.let { e.endMillis + it * MINUTE }
+        val changes =
+            events.filter { !it.allDay }.flatMap { e ->
+                listOfNotNull(
+                    hideAfterMinutes(e, s)?.let { e.endMillis + it * MINUTE },
+                    (e.endMillis + s.dimOffsetMinutes * MINUTE).takeIf { s.dimFinished },
+                )
             }.filter { it > now }
-        return minOf(midnight, hides.minOrNull() ?: Long.MAX_VALUE)
+        return minOf(midnight, changes.minOrNull() ?: Long.MAX_VALUE)
     }
 
     /** Days each event shows on, clipped to [from, from + days). All-day and multi-day events repeat per day. */
@@ -131,3 +140,16 @@ object EventFilter {
         return out.mapValues { (_, list) -> list.sortedWith(ORDER) }
     }
 }
+
+private val JOIN_HOSTS = listOf("meet.google.com", "zoom.us", "teams.microsoft.com", "teams.live.com", "webex.com")
+private val JOIN_LINK =
+    Regex("""https?://(?:[\w-]+\.)?(?:${JOIN_HOSTS.joinToString("|") { Regex.escape(it) }})/[^\s<>"]+""")
+
+/** First video-call URL in the location or description, if any. */
+fun CalEvent.joinUrl(): String? = JOIN_LINK.find(location)?.value ?: JOIN_LINK.find(description)?.value
+
+/** First readable line of the description, without links or HTML tags. */
+fun CalEvent.detail(): String =
+    description.replace(Regex("<[^>]*>"), " ").lineSequence()
+        .map { it.replace(Regex("""https?://\S+"""), "").trim() }
+        .firstOrNull { it.isNotEmpty() }.orEmpty()

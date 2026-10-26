@@ -70,4 +70,59 @@ data class AgendaSettings(
     val singleLineCards: Boolean = false,
     /** Width in dp of the weekday and date column. */
     val dateColumnWidth: Int = 48,
+    /** Fade events that ended [dimOffsetMinutes] ago; separate from the hide-finished cutoff. */
+    val dimFinished: Boolean = false,
+    val dimOffsetMinutes: Int = 0,
+    /** Label the first day of each week. */
+    val weekDividers: Boolean = false,
+    /** Extra line with the first line of the event description. */
+    val showDetails: Boolean = false,
+    /** Show a Join link on events with a Meet, Zoom, Teams or Webex URL. */
+    val tapToJoin: Boolean = true,
 )
+
+/** One-tap bundles of the look settings; everything else is left alone. */
+enum class Preset(val label: String, val apply: (AgendaSettings) -> AgendaSettings) {
+    CARDS("Cards", {
+        it.copy(
+            layout = WidgetLayout.CARDS,
+            density = Density.COMFORTABLE,
+            cornerRadius = 24,
+            maxEventsPerDay = 0,
+            singleLineCards = false,
+            dateColumnWidth = 48,
+            backgroundOpacity = 1f,
+        )
+    }),
+    SAMSUNG("Samsung", {
+        it.copy(
+            layout = WidgetLayout.LIST,
+            density = Density.COMFORTABLE,
+            cornerRadius = 20,
+            maxEventsPerDay = 0,
+            singleLineCards = false,
+            alwaysShowEndTime = false,
+            backgroundOpacity = 1f,
+        )
+    }),
+    COMPACT("Compact", {
+        it.copy(
+            layout = WidgetLayout.LIST,
+            density = Density.COMPACT,
+            cornerRadius = 12,
+            maxEventsPerDay = 3,
+            singleLineCards = true,
+            backgroundOpacity = 1f,
+        )
+    }),
+    GLASS("Glass", {
+        it.copy(
+            layout = WidgetLayout.LIST,
+            density = Density.COMFORTABLE,
+            cornerRadius = 28,
+            maxEventsPerDay = 0,
+            singleLineCards = false,
+            backgroundOpacity = 0.4f,
+        )
+    }),
+}

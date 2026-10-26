@@ -24,7 +24,12 @@ data class Snapshot(
     val settings: AgendaSettings,
     val result: Dedupe,
     val nextChangeMillis: Long,
+    /** First event after the window, only looked up when the window is empty. */
+    val upcoming: CalEvent? = null,
 )
+
+private const val UPCOMING_LOOKAHEAD_DAYS = 365L
+private const val DAY_MILLIS = 86_400_000L
 
 class CalendarRepository(private val context: Context) {
     fun hasPermission() =
@@ -127,11 +132,20 @@ class CalendarRepository(private val context: Context) {
                 zone,
                 settings.hideDeclined,
             )
-        return Snapshot(
-            settings,
-            EventFilter.apply(raw, settings, now),
-            EventFilter.nextChange(raw, settings, now, zone),
-        )
+        val result = EventFilter.apply(raw, settings, now)
+        val upcoming =
+            if (result.events.isNotEmpty()) {
+                null
+            } else {
+                val from = start.plusDays(settings.daysAhead.toLong()).toInstant().toEpochMilli()
+                val later = events(from, from + UPCOMING_LOOKAHEAD_DAYS * DAY_MILLIS, zone, settings.hideDeclined)
+                EventFilter.apply(
+                    later,
+                    settings,
+                    now,
+                ).events.minWithOrNull(compareBy({ it.beginMillis }, { it.title }))
+            }
+        return Snapshot(settings, result, EventFilter.nextChange(raw, settings, now, zone), upcoming)
     }
 
     private fun utcDateToLocalMillis(
