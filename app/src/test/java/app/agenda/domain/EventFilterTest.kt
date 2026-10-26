@@ -93,24 +93,6 @@ class EventFilterTest {
     }
 
     @Test
-    fun calendarOverrideBeatsGlobal() {
-        val e = ev("Lunch", cal = 5)
-        val never = AgendaSettings(calendarOffsets = mapOf(5L to EventFilter.NEVER_HIDE))
-        assertFalse(EventFilter.isFinished(e, never, 20 * hour))
-        val longer = AgendaSettings(hideOffsetMinutes = 0, calendarOffsets = mapOf(5L to 120))
-        assertFalse(EventFilter.isFinished(e, longer, 13 * hour))
-        assertTrue(EventFilter.isFinished(e, longer, 14 * hour))
-    }
-
-    @Test
-    fun overrideAppliesEvenWhenGlobalHidingIsOff() {
-        val e = ev("Lunch", cal = 5)
-        val s = AgendaSettings(hideFinished = false, calendarOffsets = mapOf(5L to 0))
-        assertTrue(EventFilter.isFinished(e, s, 13 * hour))
-        assertFalse(EventFilter.isFinished(ev("Lunch", cal = 6), s, 13 * hour))
-    }
-
-    @Test
     fun allDayEventsAreNotHiddenByClock() {
         val e = ev("Holiday", begin = 0, end = day, allDay = true)
         assertFalse(EventFilter.isFinished(e, AgendaSettings(), 2 * day))

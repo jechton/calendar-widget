@@ -49,8 +49,6 @@ data class AgendaSettings(
     val hideFinished: Boolean = true,
     /** Minutes to keep an event visible after it ends. */
     val hideOffsetMinutes: Int = 0,
-    /** Per-calendar override of [hideOffsetMinutes]. [EventFilter.NEVER_HIDE] keeps finished events. */
-    val calendarOffsets: Map<Long, Int> = emptyMap(),
     val hideDeclined: Boolean = true,
     val daysAhead: Int = 7,
     /** Multiplies every font size in the widget. */

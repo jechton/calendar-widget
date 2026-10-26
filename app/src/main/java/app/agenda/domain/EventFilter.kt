@@ -9,8 +9,6 @@ data class Merge(val kept: CalEvent, val dropped: List<CalEvent>)
 data class Dedupe(val events: List<CalEvent>, val merges: List<Merge>)
 
 object EventFilter {
-    const val NEVER_HIDE = -1
-
     private const val MINUTE = 60_000L
 
     private data class Key(val title: String, val begin: Long, val end: Long, val allDay: Boolean)
@@ -63,11 +61,7 @@ object EventFilter {
     private fun hideAfterMinutes(
         e: CalEvent,
         s: AgendaSettings,
-    ): Int? {
-        if (!s.hideFinished && e.calendarId !in s.calendarOffsets) return null
-        val offset = s.calendarOffsets[e.calendarId] ?: s.hideOffsetMinutes
-        return offset.takeIf { it != NEVER_HIDE }
-    }
+    ): Int? = s.hideOffsetMinutes.takeIf { s.hideFinished }
 
     fun isFinished(
         e: CalEvent,
