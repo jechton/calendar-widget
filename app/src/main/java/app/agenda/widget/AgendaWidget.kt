@@ -74,9 +74,10 @@ const val PREVIEW_ROWS = "agenda-preview-rows"
 // Cards were 14dp inside a 24dp widget.
 private const val CARD_RADIUS_RATIO = 14f / 24f
 private const val STRIPE_ONE_LINE = 22f
-private const val STRIPE_TWO_LINES = 42f
-private const val STRIPE_EXTRA_LINE = 18f
 private const val DIM_ALPHA = 0.5f
+
+// Glance silently drops children past a small per-Column cap, so long event lists go in chunks.
+private const val EVENTS_PER_COLUMN = 5
 
 private val LocalTextScale = compositionLocalOf { 1f }
 private val LocalNow = compositionLocalOf { 0L }
@@ -289,7 +290,9 @@ private fun ListDaySection(
             )
         }
         val shown = if (s.maxEventsPerDay > 0) row.events.take(s.maxEventsPerDay) else row.events
-        shown.forEach { ListEvent(context, it, row.date, s) }
+        shown.chunked(EVENTS_PER_COLUMN).forEach { chunk ->
+            Column(modifier = GlanceModifier.fillMaxWidth()) { chunk.forEach { ListEvent(context, it, row.date, s) } }
+        }
         val hidden = row.events.size - shown.size
         if (hidden > 0) {
             Text(
@@ -316,11 +319,8 @@ private fun ListEvent(
     val join = e.joinUrl().takeIf { s.tapToJoin && !dim }
     val detail = e.detail().takeIf { s.showDetails && it.isNotEmpty() }
     val twoLines = place.isNotBlank() && !s.singleLineCards
-    // lazy: Glance has no stretch-to-row-height, so the stripe height is a per-line estimate scaled by text size.
-    val lines = (if (twoLines) 2 else 1) + (if (detail != null) 1 else 0)
-    val stripe =
-        (if (lines == 1) STRIPE_ONE_LINE else STRIPE_TWO_LINES + (lines - 2) * STRIPE_EXTRA_LINE) *
-            LocalTextScale.current
+    // lazy: Glance has no stretch-to-row-height, so the stripe is a fixed one-line height (the title line, as in Samsung).
+    val stripe = STRIPE_ONE_LINE * LocalTextScale.current
     val main = GlanceTheme.colors.onSurface.dimmed(dim)
     val sub = GlanceTheme.colors.onSurfaceVariant.dimmed(dim)
     Row(
@@ -329,7 +329,7 @@ private fun ListEvent(
                 .fillMaxWidth()
                 .padding(vertical = s.density.cardPad.dp)
                 .clickable(viewEventAction(e)),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Top,
     ) {
         Box(
             modifier =
@@ -483,7 +483,11 @@ private fun DaySection(
                 )
             }
             val shown = if (s.maxEventsPerDay > 0) row.events.take(s.maxEventsPerDay) else row.events
-            shown.forEach { EventCard(context, it, row.date, s) }
+            shown.chunked(EVENTS_PER_COLUMN).forEach { chunk ->
+                Column(modifier = GlanceModifier.fillMaxWidth()) {
+                    chunk.forEach { EventCard(context, it, row.date, s) }
+                }
+            }
             val hidden = row.events.size - shown.size
             if (hidden > 0) {
                 Text(

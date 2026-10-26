@@ -86,6 +86,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.drawable.toBitmap
 import androidx.core.view.children
@@ -179,8 +180,10 @@ private fun SettingsScreen(
                                 (MAX_DATE_WIDTH - MIN_DATE_WIDTH) / DATE_STEP - 1,
                             ) { v -> edit { it.copy(dateColumnWidth = v.roundToInt()) } }
                         }
-                        SwitchRow("Title and time on one line", s.singleLineCards) { v ->
-                            edit { it.copy(singleLineCards = v) }
+                        if (s.layout == WidgetLayout.CARDS) {
+                            SwitchRow("Title and time on one line", s.singleLineCards) { v ->
+                                edit { it.copy(singleLineCards = v) }
+                            }
                         }
                         SliderRow(
                             "Events per day: ${if (s.maxEventsPerDay == 0) "no limit" else s.maxEventsPerDay}",
@@ -587,7 +590,7 @@ private inline fun <reified T : Enum<T>> EnumChoice(
                     shape = SegmentedButtonDefaults.itemShape(i, enumValues<T>().size),
                     // The check icon eats the width long labels like "Comfortable" need.
                     icon = {},
-                ) { Text(mode.name.lowercase().replaceFirstChar { it.uppercase() }, maxLines = 1) }
+                ) { Text(mode.name.lowercase().replaceFirstChar { it.uppercase() }, fontSize = 13.sp, maxLines = 1) }
             }
         }
     }
