@@ -3,6 +3,7 @@ package app.agenda.widget
 import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.provider.CalendarContract
 import androidx.compose.material3.darkColorScheme
@@ -55,12 +56,15 @@ import app.agenda.domain.CalEvent
 import app.agenda.domain.EventFilter
 import app.agenda.domain.ThemeMode
 import app.agenda.domain.WidgetLayout
+import app.agenda.domain.detail
+import app.agenda.domain.joinUrl
 import app.agenda.util.Fmt
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.time.temporal.WeekFields
 import java.util.Locale
 import java.time.format.TextStyle as DateTextStyle
 
@@ -71,8 +75,11 @@ const val PREVIEW_ROWS = "agenda-preview-rows"
 private const val CARD_RADIUS_RATIO = 14f / 24f
 private const val STRIPE_ONE_LINE = 22f
 private const val STRIPE_TWO_LINES = 42f
+private const val STRIPE_EXTRA_LINE = 18f
+private const val DIM_ALPHA = 0.5f
 
 private val LocalTextScale = compositionLocalOf { 1f }
+private val LocalNow = compositionLocalOf { 0L }
 
 @Composable
 private fun sz(size: Int) = (size * LocalTextScale.current).sp
@@ -93,14 +100,18 @@ class AgendaWidget(private val preview: Boolean = false) : GlanceAppWidget() {
         val rows =
             snapshot?.let {
                 val byDay = EventFilter.groupByDay(it.result.events, today, it.settings.daysAhead, zone)
-                // Today always shows, so an empty day still reads as "nothing left".
-                (byDay + (today to (byDay[today] ?: emptyList()))).toSortedMap().map { (d, e) -> DayRow(d, e) }
+                // Today always shows, and so does every gap day up to the last event.
+                val last = maxOf(today, byDay.keys.maxOrNull() ?: today)
+                generateSequence(today) { d -> d.plusDays(1).takeIf { it <= last } }
+                    .map { d -> DayRow(d, byDay[d] ?: emptyList()) }
+                    .toList()
             } ?: emptyList()
         val settings = snapshot?.settings ?: AgendaSettings()
+        val now = System.currentTimeMillis()
         val everythingEmpty = rows.all { it.events.isEmpty() }
 
         provideContent {
-            CompositionLocalProvider(LocalTextScale provides (settings.textScale)) {
+            CompositionLocalProvider(LocalTextScale provides settings.textScale, LocalNow provides now) {
                 WidgetTheme(settings.themeMode) {
                     val opacity = settings.backgroundOpacity
                     Column(
@@ -120,16 +131,20 @@ class AgendaWidget(private val preview: Boolean = false) : GlanceAppWidget() {
                             Header(today)
                             Spacer(GlanceModifier.height(8.dp))
                         }
+                        val firstDate = rows.firstOrNull()?.date
                         val section: @Composable (DayRow) -> Unit = {
-                            if (list) {
-                                ListDaySection(context, it, today, zone, settings, it.date == rows.first().date)
-                            } else {
-                                DaySection(context, it, today, zone, settings)
+                            Column(modifier = GlanceModifier.fillMaxWidth()) {
+                                if (settings.weekDividers && it.date != firstDate) WeekLabel(it.date)
+                                if (list) {
+                                    ListDaySection(context, it, today, zone, settings, it.date == firstDate)
+                                } else {
+                                    DaySection(context, it, today, zone, settings)
+                                }
                             }
                         }
                         when {
                             !allowed -> Message("Calendar access needed. Tap to open Agenda.", openApp())
-                            everythingEmpty -> Message("Nothing coming up.", openApp())
+                            everythingEmpty -> EmptyState(settings.daysAhead, snapshot?.upcoming)
                             else ->
                                 if (preview) {
                                     Column(
@@ -264,7 +279,7 @@ private fun ListDaySection(
         }
         if (row.events.isEmpty()) {
             Text(
-                text = "Nothing else today",
+                text = if (row.date == today) "Nothing else today" else "No events",
                 modifier = GlanceModifier.padding(vertical = s.density.gap.dp),
                 style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = sz(13)),
             )
@@ -293,9 +308,17 @@ private fun ListEvent(
     s: AgendaSettings,
 ) {
     val place = e.location.lineSequence().first()
+    val dim = EventFilter.isDimmed(e, s, LocalNow.current)
+    val join = e.joinUrl().takeIf { s.tapToJoin && !dim }
+    val detail = e.detail().takeIf { s.showDetails && it.isNotEmpty() }
     val twoLines = place.isNotBlank() && !s.singleLineCards
     // lazy: Glance has no stretch-to-row-height, so the stripe height is a per-line estimate scaled by text size.
-    val stripe = (if (twoLines) STRIPE_TWO_LINES else STRIPE_ONE_LINE) * LocalTextScale.current
+    val lines = (if (twoLines) 2 else 1) + (if (detail != null) 1 else 0)
+    val stripe =
+        (if (lines == 1) STRIPE_ONE_LINE else STRIPE_TWO_LINES + (lines - 2) * STRIPE_EXTRA_LINE) *
+            LocalTextScale.current
+    val main = GlanceTheme.colors.onSurface.dimmed(dim)
+    val sub = GlanceTheme.colors.onSurfaceVariant.dimmed(dim)
     Row(
         modifier =
             GlanceModifier
@@ -309,37 +332,90 @@ private fun ListEvent(
                 GlanceModifier
                     .width(4.dp)
                     .height(stripe.dp)
-                    .background(ColorProvider(Color(e.color).copy(alpha = 1f)))
+                    .background(ColorProvider(Color(e.color).copy(alpha = if (dim) DIM_ALPHA else 1f)))
                     .cornerRadius(2.dp),
         ) {}
         Spacer(GlanceModifier.width(8.dp))
-        Column {
-            Row {
-                Text(
-                    text = if (s.alwaysShowEndTime) Fmt.range(context, e, date) else Fmt.start(context, e, date),
-                    style =
-                        TextStyle(
-                            color = GlanceTheme.colors.onSurface,
-                            fontSize = sz(15),
-                            fontWeight = FontWeight.Bold,
-                        ),
-                )
-                Spacer(GlanceModifier.width(6.dp))
+        // Time on the left, then a column so the second line lines up under the title, as in Samsung's calendar.
+        Row(modifier = GlanceModifier.defaultWeight()) {
+            Text(
+                text = if (s.alwaysShowEndTime) Fmt.range(context, e, date) else Fmt.start(context, e, date),
+                style = TextStyle(color = main, fontSize = sz(15), fontWeight = FontWeight.Bold),
+            )
+            Spacer(GlanceModifier.width(6.dp))
+            Column(modifier = GlanceModifier.defaultWeight()) {
                 Text(
                     text = Fmt.title(e, date),
                     maxLines = 1,
-                    style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = sz(15)),
+                    style = TextStyle(color = main, fontSize = sz(15)),
                 )
+                if (twoLines) {
+                    Text(
+                        text = if (s.alwaysShowEndTime) place else "${Fmt.range(context, e, date)} $place",
+                        maxLines = 1,
+                        style = TextStyle(color = sub, fontSize = sz(13)),
+                    )
+                }
+                if (detail != null) Text(detail, maxLines = 1, style = TextStyle(color = sub, fontSize = sz(13)))
             }
-            if (twoLines) {
-                Text(
-                    text = if (s.alwaysShowEndTime) place else "${Fmt.range(context, e, date)} $place",
-                    maxLines = 1,
-                    style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = sz(13)),
-                )
-            }
+            if (join != null) JoinLink(join, GlanceTheme.colors.primary)
         }
     }
+}
+
+/** Label on the first day of each week, e.g. "Week 44". */
+@Composable
+private fun WeekLabel(date: LocalDate) {
+    val fields = WeekFields.of(Locale.getDefault())
+    if (date.dayOfWeek != fields.firstDayOfWeek) return
+    Text(
+        text = "Week ${date.get(fields.weekOfWeekBasedYear())}",
+        modifier = GlanceModifier.padding(top = 8.dp, bottom = 2.dp),
+        style = TextStyle(color = GlanceTheme.colors.primary, fontSize = sz(12), fontWeight = FontWeight.Medium),
+    )
+}
+
+@Composable
+private fun EmptyState(
+    daysAhead: Int,
+    next: CalEvent?,
+) {
+    val days = if (daysAhead == 1) "today" else "the next $daysAhead days"
+    if (next == null) return Message("Nothing in $days.", openApp())
+    val dayLabel =
+        DateTimeFormatter.ofPattern("EEE, MMM d", Locale.getDefault())
+            .format(Instant.ofEpochMilli(next.beginMillis).atZone(ZoneId.systemDefault()))
+    Column(modifier = GlanceModifier.fillMaxWidth().padding(8.dp).clickable(viewEventAction(next))) {
+        Text(
+            text = "Nothing in $days.",
+            style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = sz(14)),
+        )
+        Text(
+            text = "Next: ${next.title}, $dayLabel",
+            maxLines = 2,
+            style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = sz(14)),
+        )
+    }
+}
+
+private fun joinAction(url: String): Action =
+    actionStartActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+
+/** Fades [color] when [on]; Glance has no alpha modifier, so the colour itself carries it. */
+@Composable
+private fun ColorProvider.dimmed(on: Boolean): ColorProvider =
+    if (on) ColorProvider(getColor(LocalContext.current).copy(alpha = DIM_ALPHA)) else this
+
+@Composable
+private fun JoinLink(
+    url: String,
+    color: ColorProvider,
+) {
+    Text(
+        text = "Join",
+        modifier = GlanceModifier.padding(start = 8.dp).clickable(joinAction(url)),
+        style = TextStyle(color = color, fontSize = sz(13), fontWeight = FontWeight.Bold),
+    )
 }
 
 @Composable
@@ -395,7 +471,7 @@ private fun DaySection(
         Column(modifier = GlanceModifier.defaultWeight()) {
             if (row.events.isEmpty()) {
                 Text(
-                    text = "Nothing else today",
+                    text = if (row.date == today) "Nothing else today" else "No events",
                     modifier = GlanceModifier.padding(vertical = 8.dp),
                     style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = sz(13)),
                 )
@@ -424,13 +500,17 @@ private fun EventCard(
     date: LocalDate,
     s: AgendaSettings,
 ) {
-    val bg = Color(e.color).copy(alpha = 1f)
-    val fg = if (bg.luminance() > 0.5f) Color.Black else Color.White
+    val dim = EventFilter.isDimmed(e, s, LocalNow.current)
+    val join = e.joinUrl().takeIf { s.tapToJoin && !dim }
+    val bg = Color(e.color).copy(alpha = if (dim) DIM_ALPHA else 1f)
+    val fg = if (Color(e.color).luminance() > 0.5f) Color.Black else Color.White
+    val fgColor = ColorProvider(if (dim) fg.copy(alpha = DIM_ALPHA + 0.2f) else fg)
     val place = if (e.location.isNotBlank()) " at ${e.location.lineSequence().first()}" else ""
     val time = Fmt.range(context, e, date)
     val sub = time + place
-    val title = TextStyle(color = ColorProvider(fg), fontSize = sz(15), fontWeight = FontWeight.Medium)
-    val detail = TextStyle(color = ColorProvider(fg), fontSize = sz(13))
+    val title = TextStyle(color = fgColor, fontSize = sz(15), fontWeight = FontWeight.Medium)
+    val detail = TextStyle(color = fgColor, fontSize = sz(13))
+    val more = e.detail().takeIf { s.showDetails && it.isNotEmpty() }
     Column(
         modifier =
             GlanceModifier
@@ -446,16 +526,16 @@ private fun EventCard(
                     .padding(horizontal = 12.dp, vertical = s.density.cardPad.dp)
                     .clickable(viewEventAction(e)),
         ) {
-            if (s.singleLineCards) {
-                Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(Fmt.title(e, date), GlanceModifier.defaultWeight(), maxLines = 1, style = title)
+            Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(Fmt.title(e, date), GlanceModifier.defaultWeight(), maxLines = 1, style = title)
+                if (s.singleLineCards) {
                     Spacer(GlanceModifier.width(8.dp))
                     Text(time, maxLines = 1, style = detail)
                 }
-            } else {
-                Text(Fmt.title(e, date), maxLines = 1, style = title)
-                Text(sub, maxLines = 1, style = detail)
+                if (join != null) JoinLink(join, fgColor)
             }
+            if (!s.singleLineCards) Text(sub, maxLines = 1, style = detail)
+            if (more != null) Text(more, maxLines = 1, style = detail)
         }
     }
 }
