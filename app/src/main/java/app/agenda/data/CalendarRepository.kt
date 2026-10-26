@@ -50,7 +50,8 @@ class CalendarRepository(private val context: Context) {
             context.contentResolver.query(
                 CalendarContract.Calendars.CONTENT_URI,
                 projection,
-                "${CalendarContract.Calendars.VISIBLE} = 1",
+                // Instances returns events from unselected calendars too, so list them all or they can't be hidden.
+                null,
                 null,
                 "${CalendarContract.Calendars.ACCOUNT_NAME}, ${CalendarContract.Calendars.CALENDAR_DISPLAY_NAME}",
             )?.use { c ->
