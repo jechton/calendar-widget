@@ -3,7 +3,12 @@ package app.agenda.widget
 import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.provider.CalendarContract
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
@@ -14,6 +19,7 @@ import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
+import androidx.glance.LocalContext
 import androidx.glance.action.Action
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
@@ -35,6 +41,7 @@ import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.width
+import androidx.glance.material3.ColorProviders
 import androidx.glance.semantics.contentDescription
 import androidx.glance.semantics.semantics
 import androidx.glance.text.FontWeight
@@ -45,6 +52,7 @@ import app.agenda.MainActivity
 import app.agenda.data.CalendarRepository
 import app.agenda.domain.CalEvent
 import app.agenda.domain.EventFilter
+import app.agenda.domain.ThemeMode
 import app.agenda.util.Fmt
 import java.time.Instant
 import java.time.LocalDate
@@ -84,12 +92,17 @@ class AgendaWidget(private val preview: Boolean = false) : GlanceAppWidget() {
 
         provideContent {
             CompositionLocalProvider(LocalTextScale provides (snapshot?.settings?.textScale ?: 1f)) {
-                GlanceTheme {
+                WidgetTheme(snapshot?.settings?.themeMode ?: ThemeMode.SYSTEM) {
+                    val opacity = snapshot?.settings?.backgroundOpacity ?: 1f
                     Column(
                         modifier =
                             GlanceModifier
                                 .fillMaxSize()
-                                .background(GlanceTheme.colors.widgetBackground)
+                                .background(
+                                    ColorProvider(
+                                        GlanceTheme.colors.widgetBackground.getColor(context).copy(alpha = opacity),
+                                    ),
+                                )
                                 .cornerRadius(24.dp)
                                 .padding(12.dp),
                     ) {
@@ -284,4 +297,23 @@ private fun EventCard(
 
 class AgendaWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = AgendaWidget()
+}
+
+/** Follows the system unless [mode] forces one palette (Material You on Android 12+, static otherwise). */
+@Composable
+private fun WidgetTheme(
+    mode: ThemeMode,
+    content: @Composable () -> Unit,
+) {
+    if (mode == ThemeMode.SYSTEM) return GlanceTheme(content = content)
+    val context = LocalContext.current
+    val dark = mode == ThemeMode.DARK
+    val scheme =
+        when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+                if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            dark -> darkColorScheme()
+            else -> lightColorScheme()
+        }
+    GlanceTheme(colors = ColorProviders(light = scheme, dark = scheme), content = content)
 }

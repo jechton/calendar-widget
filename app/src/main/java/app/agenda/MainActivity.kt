@@ -1,8 +1,11 @@
 package app.agenda
 
 import android.Manifest
+import android.app.WallpaperManager
 import android.appwidget.AppWidgetManager
+import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
@@ -14,6 +17,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +27,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -30,6 +35,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -49,6 +55,9 @@ import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -65,11 +74,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.graphics.drawable.toBitmap
 import androidx.core.view.children
 import androidx.glance.ExperimentalGlanceApi
 import androidx.glance.appwidget.AppWidgetId
@@ -80,6 +93,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.agenda.domain.AgendaSettings
 import app.agenda.domain.CalInfo
 import app.agenda.domain.EventFilter
+import app.agenda.domain.ThemeMode
 import app.agenda.ui.AgendaTheme
 import app.agenda.widget.AgendaWidget
 import app.agenda.widget.PREVIEW_ROWS
@@ -183,6 +197,15 @@ private fun SettingsScreen(
                         SliderRow("Text size: ${(s.textScale * 100).roundToInt()}%", s.textScale, 0.8f..1.5f) { v ->
                             edit { it.copy(textScale = v) }
                         }
+                        SliderRow(
+                            "Widget background: ${(s.backgroundOpacity * 100).roundToInt()}%",
+                            s.backgroundOpacity,
+                            0f..1f,
+                            OPACITY_STEPS,
+                        ) { v ->
+                            edit { it.copy(backgroundOpacity = v) }
+                        }
+                        ThemeChoice(s.themeMode) { m -> edit { it.copy(themeMode = m) } }
                         SwitchRow("Hide declined events", s.hideDeclined) { v -> edit { it.copy(hideDeclined = v) } }
                     }
                 }
@@ -195,6 +218,7 @@ private const val MAX_PREVIEW = 10
 private const val STEP = 5
 private const val MAX_OFFSET = 240
 private const val MAX_DAYS = 14
+private const val OPACITY_STEPS = 9
 
 @Composable
 private fun PermissionCard(onResult: () -> Unit) {
@@ -410,17 +434,28 @@ private fun WidgetPreview(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    // lazy: needs storage permission on some Android versions; falls back to a gradient so transparency still shows.
+    val wallpaper =
+        remember {
+            runCatching { WallpaperManager.getInstance(context).drawable?.toBitmap()?.asImageBitmap() }.getOrNull()
+        }
+    // Needs no permission (API 27+): the wallpaper's own palette stands in when the image itself is unreadable.
+    val backdrop = remember { wallpaperGradient(context) }
     val views by produceState<RemoteViews?>(null, settings) {
         AgendaWidget(preview = true).runComposition(context, AppWidgetId(PREVIEW_ID)).collect { value = it }
     }
-    AndroidView(
-        factory = { FrameLayout(it) },
-        update = { host ->
-            host.removeAllViews()
-            views?.let { host.addView(it.apply(context, host).also(::disableClicks).also(::scrollRows)) }
-        },
-        modifier = modifier.fillMaxWidth().height(PREVIEW_HEIGHT.dp).clipToBounds(),
-    )
+    Box(modifier.fillMaxWidth().height(PREVIEW_HEIGHT.dp).clip(RoundedCornerShape(24.dp))) {
+        wallpaper?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
+            ?: Box(Modifier.fillMaxSize().background(Brush.linearGradient(backdrop)))
+        AndroidView(
+            factory = { FrameLayout(it) },
+            update = { host ->
+                host.removeAllViews()
+                views?.let { host.addView(it.apply(context, host).also(::disableClicks).also(::scrollRows)) }
+            },
+            modifier = Modifier.fillMaxSize().clipToBounds(),
+        )
+    }
 }
 
 /** Like the real widget list, only the rows scroll; the header and background stay put. */
@@ -447,3 +482,31 @@ private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
 private const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
 private const val PREVIEW_ID = -1
 private const val PREVIEW_HEIGHT = 260
+
+@Composable
+private fun ThemeChoice(
+    selected: ThemeMode,
+    onChange: (ThemeMode) -> Unit,
+) {
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Text("Widget theme")
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            ThemeMode.entries.forEachIndexed { i, mode ->
+                SegmentedButton(
+                    selected = mode == selected,
+                    onClick = { onChange(mode) },
+                    shape = SegmentedButtonDefaults.itemShape(i, ThemeMode.entries.size),
+                ) { Text(mode.name.lowercase().replaceFirstChar { it.uppercase() }) }
+            }
+        }
+    }
+}
+
+private val FALLBACK_BACKDROP = listOf(Color(0xFF6A8CAF), Color(0xFFE0A96D))
+
+private fun wallpaperGradient(context: Context): List<Color> {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1) return FALLBACK_BACKDROP
+    val manager = WallpaperManager.getInstance(context)
+    val c = manager.getWallpaperColors(WallpaperManager.FLAG_SYSTEM) ?: return FALLBACK_BACKDROP
+    return listOfNotNull(c.primaryColor, c.secondaryColor, c.tertiaryColor).map { Color(it.toArgb()) }
+}

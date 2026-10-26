@@ -24,6 +24,9 @@ data class CalInfo(
 )
 
 @Serializable
+enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
+@Serializable
 data class AgendaSettings(
     val hiddenCalendarIds: Set<Long> = emptySet(),
     val dedupe: Boolean = true,
@@ -40,4 +43,7 @@ data class AgendaSettings(
     val daysAhead: Int = 7,
     /** Multiplies every font size in the widget. */
     val textScale: Float = 1f,
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    /** Widget background alpha: 0 is see-through, 1 is solid. */
+    val backgroundOpacity: Float = 1f,
 )
