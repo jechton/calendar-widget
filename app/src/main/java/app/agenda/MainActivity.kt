@@ -504,7 +504,7 @@ private fun WidgetPreview(
     val views by produceState<RemoteViews?>(null, settings) {
         AgendaWidget(preview = true).runComposition(context, AppWidgetId(PREVIEW_ID)).collect { value = it }
     }
-    Box(modifier.fillMaxWidth().height(PREVIEW_HEIGHT.dp).clip(RoundedCornerShape(24.dp))) {
+    Box(modifier.fillMaxWidth().height(PREVIEW_HEIGHT.dp).clip(RoundedCornerShape(settings.cornerRadius.dp))) {
         wallpaper?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
             ?: Box(Modifier.fillMaxSize().background(Brush.linearGradient(backdrop)))
         AndroidView(
