@@ -561,7 +561,9 @@ private inline fun <reified T : Enum<T>> EnumChoice(
                     selected = mode == selected,
                     onClick = { onChange(mode) },
                     shape = SegmentedButtonDefaults.itemShape(i, enumValues<T>().size),
-                ) { Text(mode.name.lowercase().replaceFirstChar { it.uppercase() }) }
+                    // The check icon eats the width long labels like "Comfortable" need.
+                    icon = {},
+                ) { Text(mode.name.lowercase().replaceFirstChar { it.uppercase() }, maxLines = 1) }
             }
         }
     }
