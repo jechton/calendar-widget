@@ -442,6 +442,7 @@ private fun DaySection(
     Row(modifier = GlanceModifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
+            verticalAlignment = Alignment.CenterVertically,
             modifier =
                 GlanceModifier
                     .width(s.dateColumnWidth.dp)
@@ -449,9 +450,10 @@ private fun DaySection(
                     .clickable(openCalendar(row.date.atStartOfDay(zone).toInstant().toEpochMilli()))
                     .let {
                         if (isToday) {
-                            it.background(
-                                GlanceTheme.colors.primaryContainer,
-                            ).cornerRadius(s.cornerRadius.dp)
+                            // Square at column width + max radius = circle.
+                            it.height(s.dateColumnWidth.dp)
+                                .background(GlanceTheme.colors.primaryContainer)
+                                .cornerRadius((s.dateColumnWidth / 2).dp)
                         } else {
                             it
                         }
