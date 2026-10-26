@@ -93,7 +93,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.agenda.domain.AgendaSettings
 import app.agenda.domain.CalInfo
 import app.agenda.domain.EventFilter
-import app.agenda.domain.ThemeMode
 import app.agenda.ui.AgendaTheme
 import app.agenda.widget.AgendaWidget
 import app.agenda.widget.PREVIEW_ROWS
@@ -205,7 +204,29 @@ private fun SettingsScreen(
                         ) { v ->
                             edit { it.copy(backgroundOpacity = v) }
                         }
-                        ThemeChoice(s.themeMode) { m -> edit { it.copy(themeMode = m) } }
+                        EnumChoice("Widget theme", s.themeMode) { m -> edit { it.copy(themeMode = m) } }
+                        SliderRow(
+                            "Corner radius: ${s.cornerRadius} dp",
+                            s.cornerRadius.toFloat(),
+                            0f..MAX_RADIUS.toFloat(),
+                            MAX_RADIUS / RADIUS_STEP - 1,
+                        ) { v -> edit { it.copy(cornerRadius = v.roundToInt()) } }
+                        EnumChoice("Spacing", s.density) { d -> edit { it.copy(density = d) } }
+                        SliderRow(
+                            "Events per day: ${if (s.maxEventsPerDay == 0) "no limit" else s.maxEventsPerDay}",
+                            (if (s.maxEventsPerDay == 0) NO_LIMIT else s.maxEventsPerDay).toFloat(),
+                            1f..NO_LIMIT.toFloat(),
+                            NO_LIMIT - 2,
+                        ) { v -> edit { it.copy(maxEventsPerDay = v.roundToInt().takeIf { n -> n < NO_LIMIT } ?: 0) } }
+                        SliderRow(
+                            "Date column width: ${s.dateColumnWidth} dp",
+                            s.dateColumnWidth.toFloat(),
+                            MIN_DATE_WIDTH.toFloat()..MAX_DATE_WIDTH.toFloat(),
+                            (MAX_DATE_WIDTH - MIN_DATE_WIDTH) / DATE_STEP - 1,
+                        ) { v -> edit { it.copy(dateColumnWidth = v.roundToInt()) } }
+                        SwitchRow("Title and time on one line", s.singleLineCards) { v ->
+                            edit { it.copy(singleLineCards = v) }
+                        }
                         SwitchRow("Hide declined events", s.hideDeclined) { v -> edit { it.copy(hideDeclined = v) } }
                     }
                 }
@@ -219,6 +240,12 @@ private const val STEP = 5
 private const val MAX_OFFSET = 240
 private const val MAX_DAYS = 14
 private const val OPACITY_STEPS = 9
+private const val MAX_RADIUS = 32
+private const val RADIUS_STEP = 4
+private const val NO_LIMIT = 11
+private const val MIN_DATE_WIDTH = 40
+private const val MAX_DATE_WIDTH = 72
+private const val DATE_STEP = 4
 
 @Composable
 private fun PermissionCard(onResult: () -> Unit) {
@@ -484,18 +511,19 @@ private const val PREVIEW_ID = -1
 private const val PREVIEW_HEIGHT = 260
 
 @Composable
-private fun ThemeChoice(
-    selected: ThemeMode,
-    onChange: (ThemeMode) -> Unit,
+private inline fun <reified T : Enum<T>> EnumChoice(
+    label: String,
+    selected: T,
+    crossinline onChange: (T) -> Unit,
 ) {
     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Text("Widget theme")
+        Text(label)
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-            ThemeMode.entries.forEachIndexed { i, mode ->
+            enumValues<T>().forEachIndexed { i, mode ->
                 SegmentedButton(
                     selected = mode == selected,
                     onClick = { onChange(mode) },
-                    shape = SegmentedButtonDefaults.itemShape(i, ThemeMode.entries.size),
+                    shape = SegmentedButtonDefaults.itemShape(i, enumValues<T>().size),
                 ) { Text(mode.name.lowercase().replaceFirstChar { it.uppercase() }) }
             }
         }

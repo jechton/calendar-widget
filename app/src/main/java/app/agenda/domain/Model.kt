@@ -23,6 +23,14 @@ data class CalInfo(
     val color: Int,
 )
 
+/** Dp values for the widget padding, the gap between cards and the padding inside a card. */
+@Serializable
+enum class Density(val outer: Int, val gap: Int, val cardPad: Int) {
+    COMPACT(8, 2, 4),
+    COMFORTABLE(12, 4, 8),
+    SPACIOUS(16, 8, 12),
+}
+
 @Serializable
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
@@ -46,4 +54,13 @@ data class AgendaSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     /** Widget background alpha: 0 is see-through, 1 is solid. */
     val backgroundOpacity: Float = 1f,
+    /** Widget corner radius in dp; event cards and the today pill follow it. */
+    val cornerRadius: Int = 24,
+    val density: Density = Density.COMFORTABLE,
+    /** 0 shows every event of a day. */
+    val maxEventsPerDay: Int = 0,
+    /** Title and time on one line instead of two. */
+    val singleLineCards: Boolean = false,
+    /** Width in dp of the weekday and date column. */
+    val dateColumnWidth: Int = 48,
 )

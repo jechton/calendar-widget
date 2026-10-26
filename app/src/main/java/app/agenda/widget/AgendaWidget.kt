@@ -50,6 +50,7 @@ import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import app.agenda.MainActivity
 import app.agenda.data.CalendarRepository
+import app.agenda.domain.AgendaSettings
 import app.agenda.domain.CalEvent
 import app.agenda.domain.EventFilter
 import app.agenda.domain.ThemeMode
@@ -63,6 +64,9 @@ import java.time.format.TextStyle as DateTextStyle
 
 /** Marks the rows container in preview mode so the app can make just that part scroll. */
 const val PREVIEW_ROWS = "agenda-preview-rows"
+
+// Cards were 14dp inside a 24dp widget.
+private const val CARD_RADIUS_RATIO = 14f / 24f
 
 private val LocalTextScale = compositionLocalOf { 1f }
 
@@ -88,12 +92,13 @@ class AgendaWidget(private val preview: Boolean = false) : GlanceAppWidget() {
                 // Today always shows, so an empty day still reads as "nothing left".
                 (byDay + (today to (byDay[today] ?: emptyList()))).toSortedMap().map { (d, e) -> DayRow(d, e) }
             } ?: emptyList()
+        val settings = snapshot?.settings ?: AgendaSettings()
         val everythingEmpty = rows.all { it.events.isEmpty() }
 
         provideContent {
-            CompositionLocalProvider(LocalTextScale provides (snapshot?.settings?.textScale ?: 1f)) {
-                WidgetTheme(snapshot?.settings?.themeMode ?: ThemeMode.SYSTEM) {
-                    val opacity = snapshot?.settings?.backgroundOpacity ?: 1f
+            CompositionLocalProvider(LocalTextScale provides (settings.textScale)) {
+                WidgetTheme(settings.themeMode) {
+                    val opacity = settings.backgroundOpacity
                     Column(
                         modifier =
                             GlanceModifier
@@ -103,8 +108,8 @@ class AgendaWidget(private val preview: Boolean = false) : GlanceAppWidget() {
                                         GlanceTheme.colors.widgetBackground.getColor(context).copy(alpha = opacity),
                                     ),
                                 )
-                                .cornerRadius(24.dp)
-                                .padding(12.dp),
+                                .cornerRadius(settings.cornerRadius.dp)
+                                .padding(settings.density.outer.dp),
                     ) {
                         Header(today)
                         Spacer(GlanceModifier.height(8.dp))
@@ -119,10 +124,10 @@ class AgendaWidget(private val preview: Boolean = false) : GlanceAppWidget() {
                                                 .fillMaxWidth()
                                                 .defaultWeight()
                                                 .semantics { contentDescription = PREVIEW_ROWS },
-                                    ) { rows.forEach { DaySection(context, it, today, zone) } }
+                                    ) { rows.forEach { DaySection(context, it, today, zone, settings) } }
                                 } else {
                                     LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
-                                        items(rows) { DaySection(context, it, today, zone) }
+                                        items(rows) { DaySection(context, it, today, zone, settings) }
                                     }
                                 }
                         }
@@ -218,6 +223,7 @@ private fun DaySection(
     row: DayRow,
     today: LocalDate,
     zone: ZoneId,
+    s: AgendaSettings,
 ) {
     val isToday = row.date == today
     Row(modifier = GlanceModifier.fillMaxWidth().padding(vertical = 4.dp)) {
@@ -225,11 +231,17 @@ private fun DaySection(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier =
                 GlanceModifier
-                    .width(48.dp)
+                    .width(s.dateColumnWidth.dp)
                     .padding(vertical = 4.dp)
                     .clickable(openCalendar(row.date.atStartOfDay(zone).toInstant().toEpochMilli()))
                     .let {
-                        if (isToday) it.background(GlanceTheme.colors.primaryContainer).cornerRadius(24.dp) else it
+                        if (isToday) {
+                            it.background(
+                                GlanceTheme.colors.primaryContainer,
+                            ).cornerRadius(s.cornerRadius.dp)
+                        } else {
+                            it
+                        }
                     },
         ) {
             val color = if (isToday) GlanceTheme.colors.onPrimaryContainer else GlanceTheme.colors.onSurfaceVariant
@@ -251,7 +263,19 @@ private fun DaySection(
                     style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = sz(13)),
                 )
             }
-            row.events.forEach { EventCard(context, it, row.date) }
+            val shown = if (s.maxEventsPerDay > 0) row.events.take(s.maxEventsPerDay) else row.events
+            shown.forEach { EventCard(context, it, row.date, s) }
+            val hidden = row.events.size - shown.size
+            if (hidden > 0) {
+                Text(
+                    text = "+$hidden more",
+                    modifier =
+                        GlanceModifier
+                            .padding(bottom = s.density.gap.dp)
+                            .clickable(openCalendar(row.date.atStartOfDay(zone).toInstant().toEpochMilli())),
+                    style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = sz(12)),
+                )
+            }
         }
     }
 }
@@ -261,36 +285,40 @@ private fun EventCard(
     context: Context,
     e: CalEvent,
     date: LocalDate,
+    s: AgendaSettings,
 ) {
     val bg = Color(e.color).copy(alpha = 1f)
     val fg = if (bg.luminance() > 0.5f) Color.Black else Color.White
     val place = if (e.location.isNotBlank()) " at ${e.location.lineSequence().first()}" else ""
-    val sub = Fmt.range(context, e, date) + place
+    val time = Fmt.range(context, e, date)
+    val sub = time + place
+    val title = TextStyle(color = ColorProvider(fg), fontSize = sz(15), fontWeight = FontWeight.Medium)
+    val detail = TextStyle(color = ColorProvider(fg), fontSize = sz(13))
     Column(
         modifier =
             GlanceModifier
                 .fillMaxWidth()
-                .padding(bottom = 4.dp),
+                .padding(bottom = s.density.gap.dp),
     ) {
         Column(
             modifier =
                 GlanceModifier
                     .fillMaxWidth()
                     .background(ColorProvider(bg))
-                    .cornerRadius(14.dp)
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .cornerRadius((s.cornerRadius * CARD_RADIUS_RATIO).dp)
+                    .padding(horizontal = 12.dp, vertical = s.density.cardPad.dp)
                     .clickable(viewEventAction(e)),
         ) {
-            Text(
-                text = Fmt.title(e, date),
-                maxLines = 1,
-                style = TextStyle(color = ColorProvider(fg), fontSize = sz(15), fontWeight = FontWeight.Medium),
-            )
-            Text(
-                text = sub,
-                maxLines = 1,
-                style = TextStyle(color = ColorProvider(fg), fontSize = sz(13)),
-            )
+            if (s.singleLineCards) {
+                Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(Fmt.title(e, date), GlanceModifier.defaultWeight(), maxLines = 1, style = title)
+                    Spacer(GlanceModifier.width(8.dp))
+                    Text(time, maxLines = 1, style = detail)
+                }
+            } else {
+                Text(Fmt.title(e, date), maxLines = 1, style = title)
+                Text(sub, maxLines = 1, style = detail)
+            }
         }
     }
 }
