@@ -89,7 +89,26 @@ class CalendarRepository(private val context: Context) {
                     Instances.EVENT_COLOR,
                     Instances.CALENDAR_COLOR,
                     Instances.SELF_ATTENDEE_STATUS,
+                    Instances.EVENT_COLOR_KEY,
+                    CalendarContract.Calendars.ACCOUNT_NAME,
+                    CalendarContract.Calendars.ACCOUNT_TYPE,
                 )
+            // Google syncs only a palette key for event colors; the real color lives in the Colors table.
+            val eventColors = mutableMapOf<Triple<String?, String?, String?>, Int>()
+            context.contentResolver.query(
+                CalendarContract.Colors.CONTENT_URI,
+                arrayOf(
+                    CalendarContract.Colors.ACCOUNT_TYPE,
+                    CalendarContract.Colors.ACCOUNT_NAME,
+                    CalendarContract.Colors.COLOR_KEY,
+                    CalendarContract.Colors.COLOR,
+                ),
+                "${CalendarContract.Colors.COLOR_TYPE} = ${CalendarContract.Colors.TYPE_EVENT}",
+                null,
+                null,
+            )?.use { c ->
+                while (c.moveToNext()) eventColors[Triple(c.getString(0), c.getString(1), c.getString(2))] = c.getInt(3)
+            }
             val out = mutableListOf<CalEvent>()
             context.contentResolver.query(uri, projection, null, null, "${Instances.BEGIN} ASC")?.use { c ->
                 while (c.moveToNext()) {
@@ -102,7 +121,11 @@ class CalendarRepository(private val context: Context) {
                         begin = utcDateToLocalMillis(begin, zone)
                         end = utcDateToLocalMillis(end, zone)
                     }
-                    val color = c.getInt(8).takeIf { it != 0 } ?: c.getInt(9).takeIf { it != 0 } ?: Color.GRAY
+                    val color =
+                        eventColors[Triple(c.getString(13), c.getString(12), c.getString(11))]
+                            ?: c.getInt(8).takeIf { it != 0 }
+                            ?: c.getInt(9).takeIf { it != 0 }
+                            ?: Color.GRAY
                     out +=
                         CalEvent(
                             id = c.getLong(0),
