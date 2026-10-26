@@ -257,7 +257,11 @@ private fun ListDaySection(
                     GlanceModifier
                         .fillMaxWidth()
                         .height(1.dp)
-                        .background(GlanceTheme.colors.outline),
+                        .background(
+                            ColorProvider(
+                                GlanceTheme.colors.outline.getColor(LocalContext.current).copy(alpha = 0.35f),
+                            ),
+                        ),
             ) {}
             Spacer(GlanceModifier.height(s.density.gap.dp))
         }
