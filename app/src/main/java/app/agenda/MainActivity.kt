@@ -93,6 +93,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.agenda.domain.AgendaSettings
 import app.agenda.domain.CalInfo
 import app.agenda.domain.EventFilter
+import app.agenda.domain.Preset
 import app.agenda.domain.WidgetLayout
 import app.agenda.ui.AgendaTheme
 import app.agenda.widget.AgendaWidget
@@ -177,11 +178,31 @@ private fun SettingsScreen(
                                 0f..MAX_OFFSET.toFloat(),
                             ) { v -> edit { it.copy(hideOffsetMinutes = (v / STEP).toInt() * STEP) } }
                         }
+                        SwitchRow("Dim events after they end", s.dimFinished) { v -> edit { it.copy(dimFinished = v) } }
+                        if (s.dimFinished) {
+                            SliderRow(
+                                "Dim ${s.dimOffsetMinutes} min after the end",
+                                s.dimOffsetMinutes.toFloat(),
+                                0f..MAX_OFFSET.toFloat(),
+                            ) { v -> edit { it.copy(dimOffsetMinutes = (v / STEP).toInt() * STEP) } }
+                        }
                     }
                 }
                 item {
                     Section("Calendars") {
                         state.calendars.forEach { cal -> CalendarRow(cal, s) { change -> edit(change) } }
+                    }
+                }
+                item {
+                    Section("Presets") {
+                        FlowRow(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Preset.entries.forEach { p ->
+                                AssistChip(onClick = { edit(p.apply) }, label = { Text(p.label) })
+                            }
+                        }
                     }
                 }
                 item {
@@ -236,6 +257,9 @@ private fun SettingsScreen(
                         SwitchRow("Title and time on one line", s.singleLineCards) { v ->
                             edit { it.copy(singleLineCards = v) }
                         }
+                        SwitchRow("Week labels", s.weekDividers) { v -> edit { it.copy(weekDividers = v) } }
+                        SwitchRow("Show description", s.showDetails) { v -> edit { it.copy(showDetails = v) } }
+                        SwitchRow("Join link for video calls", s.tapToJoin) { v -> edit { it.copy(tapToJoin = v) } }
                         SwitchRow("Hide declined events", s.hideDeclined) { v -> edit { it.copy(hideDeclined = v) } }
                     }
                 }
@@ -503,7 +527,11 @@ private fun scrollRows(root: View) {
     val index = parent.indexOfChild(rows)
     val params = rows.layoutParams
     parent.removeView(rows)
-    val scroll = ScrollView(rows.context).apply { addView(rows, FrameLayout.LayoutParams(MATCH, WRAP)) }
+    val scroll =
+        ScrollView(rows.context).apply {
+            isVerticalScrollBarEnabled = false
+            addView(rows, FrameLayout.LayoutParams(MATCH, WRAP))
+        }
     parent.addView(scroll, index, params)
 }
 
