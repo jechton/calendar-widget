@@ -42,15 +42,19 @@ object EventFilter {
         events.groupBy { Key(normalizedTitle(it.title, regexes), it.beginMillis, it.endMillis, it.allDay) }
             .values
             .forEach { group ->
-                val winner =
+                val ranked =
                     group
                         .sortedWith(
                             compareByDescending<CalEvent> { info(it) }
                                 .thenBy { if (settings.preferLongTitle) -it.title.length else it.title.length }
                                 .thenBy { it.calendarId },
-                        ).first()
+                        )
+                val first = ranked.first()
+                // An event-set color beats a calendar color; if several copies have one, the best-ranked wins.
+                val own = ranked.firstOrNull { it.ownColor }
+                val winner = if (own == null || own === first) first else first.copy(color = own.color, ownColor = true)
                 kept += winner
-                if (group.size > 1) merges += Merge(winner, group - winner)
+                if (group.size > 1) merges += Merge(winner, group - first)
             }
         return Dedupe(kept.sortedWith(ORDER), merges)
     }

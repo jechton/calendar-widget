@@ -136,4 +136,12 @@ class EventFilterTest {
         assertEquals("Agenda notes", e.detail())
         assertEquals(null, ev("Dinner", location = "https://example.com/x").joinUrl())
     }
+
+    @Test
+    fun mergedCopyKeepsAnEventSetColorOverACalendarColor() {
+        val calendarGreen = ev("Dinner", 1).copy(color = 0xFF00FF00.toInt())
+        val eventBlue = ev("Dinner", 2).copy(color = 0xFF0000FF.toInt(), ownColor = true)
+        val r = EventFilter.dedupe(listOf(calendarGreen, eventBlue), AgendaSettings())
+        assertEquals(0xFF0000FF.toInt(), r.events.single().color)
+    }
 }

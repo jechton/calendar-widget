@@ -14,6 +14,8 @@ data class CalEvent(
     val location: String,
     val description: String,
     val color: Int,
+    /** True when the event has its own color, not just its calendar's. */
+    val ownColor: Boolean = false,
 )
 
 data class CalInfo(

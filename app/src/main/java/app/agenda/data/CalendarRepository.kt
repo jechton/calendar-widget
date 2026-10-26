@@ -121,11 +121,10 @@ class CalendarRepository(private val context: Context) {
                         begin = utcDateToLocalMillis(begin, zone)
                         end = utcDateToLocalMillis(end, zone)
                     }
-                    val color =
+                    val own =
                         eventColors[Triple(c.getString(13), c.getString(12), c.getString(11))]
                             ?: c.getInt(8).takeIf { it != 0 }
-                            ?: c.getInt(9).takeIf { it != 0 }
-                            ?: Color.GRAY
+                    val color = own ?: c.getInt(9).takeIf { it != 0 } ?: Color.GRAY
                     out +=
                         CalEvent(
                             id = c.getLong(0),
@@ -137,6 +136,7 @@ class CalendarRepository(private val context: Context) {
                             location = c.getString(6).orEmpty(),
                             description = c.getString(7).orEmpty(),
                             color = color,
+                            ownColor = own != null,
                         )
                 }
             }
