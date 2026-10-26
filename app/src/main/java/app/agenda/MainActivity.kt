@@ -19,6 +19,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,8 +43,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -69,6 +68,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -140,6 +140,113 @@ private fun SettingsScreen(
                     item { PermissionCard(onPermission) }
                 }
                 item {
+                    Section("Presets") {
+                        FlowRow(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Preset.entries.forEach { p ->
+                                AssistChip(onClick = { edit(p.apply) }, label = { Text(p.label) })
+                            }
+                        }
+                    }
+                }
+                item {
+                    Section("Layout") {
+                        EnumChoice("Layout", s.layout) { l -> edit { it.copy(layout = l) } }
+                        if (s.layout == WidgetLayout.LIST) {
+                            SwitchRow("Always show end times", s.alwaysShowEndTime) { v ->
+                                edit { it.copy(alwaysShowEndTime = v) }
+                            }
+                        }
+                        EnumChoice("Spacing", s.density) { d -> edit { it.copy(density = d) } }
+                        SliderRow(
+                            "Corner radius: ${s.cornerRadius} dp",
+                            s.cornerRadius.toFloat(),
+                            0f..MAX_RADIUS.toFloat(),
+                            MAX_RADIUS / RADIUS_STEP - 1,
+                        ) { v -> edit { it.copy(cornerRadius = v.roundToInt()) } }
+                        if (s.layout == WidgetLayout.CARDS) {
+                            SliderRow(
+                                "Date column width: ${s.dateColumnWidth} dp",
+                                s.dateColumnWidth.toFloat(),
+                                MIN_DATE_WIDTH.toFloat()..MAX_DATE_WIDTH.toFloat(),
+                                (MAX_DATE_WIDTH - MIN_DATE_WIDTH) / DATE_STEP - 1,
+                            ) { v -> edit { it.copy(dateColumnWidth = v.roundToInt()) } }
+                        }
+                        SwitchRow("Title and time on one line", s.singleLineCards) { v ->
+                            edit { it.copy(singleLineCards = v) }
+                        }
+                        SliderRow(
+                            "Events per day: ${if (s.maxEventsPerDay == 0) "no limit" else s.maxEventsPerDay}",
+                            (if (s.maxEventsPerDay == 0) NO_LIMIT else s.maxEventsPerDay).toFloat(),
+                            1f..NO_LIMIT.toFloat(),
+                            NO_LIMIT - 2,
+                        ) { v -> edit { it.copy(maxEventsPerDay = v.roundToInt().takeIf { n -> n < NO_LIMIT } ?: 0) } }
+                    }
+                }
+                item {
+                    Section("Appearance") {
+                        EnumChoice("Widget theme", s.themeMode) { m -> edit { it.copy(themeMode = m) } }
+                        SliderRow(
+                            "Widget background: ${(s.backgroundOpacity * 100).roundToInt()}%",
+                            s.backgroundOpacity,
+                            0f..1f,
+                            OPACITY_STEPS,
+                        ) { v ->
+                            edit { it.copy(backgroundOpacity = v) }
+                        }
+                        SliderRow("Text size: ${(s.textScale * 100).roundToInt()}%", s.textScale, 0.8f..1.5f) { v ->
+                            edit { it.copy(textScale = v) }
+                        }
+                    }
+                }
+                item {
+                    Section("Content") {
+                        SliderRow(
+                            "Days ahead: ${s.daysAhead}",
+                            s.daysAhead.toFloat(),
+                            1f..MAX_DAYS.toFloat(),
+                            MAX_DAYS - 2,
+                        ) { v ->
+                            edit { it.copy(daysAhead = v.toInt()) }
+                        }
+                        SwitchRow("Week labels", s.weekDividers) { v -> edit { it.copy(weekDividers = v) } }
+                        SwitchRow("Show description", s.showDetails) { v -> edit { it.copy(showDetails = v) } }
+                        SwitchRow("Join link for video calls", s.tapToJoin) { v -> edit { it.copy(tapToJoin = v) } }
+                    }
+                }
+                item {
+                    Section("Calendars") {
+                        state.calendars.groupBy { it.account }.forEach { (account, cals) ->
+                            AccountGroup(account, cals, s) { change -> edit(change) }
+                        }
+                    }
+                }
+                item {
+                    Section("Hide events") {
+                        SwitchRow("Hide declined events", s.hideDeclined) { v -> edit { it.copy(hideDeclined = v) } }
+                        SwitchRow("Hide events after they end", s.hideFinished) { v ->
+                            edit { it.copy(hideFinished = v) }
+                        }
+                        if (s.hideFinished) {
+                            SliderRow(
+                                "Keep visible for ${s.hideOffsetMinutes} min after the end",
+                                s.hideOffsetMinutes.toFloat(),
+                                0f..MAX_OFFSET.toFloat(),
+                            ) { v -> edit { it.copy(hideOffsetMinutes = (v / STEP).toInt() * STEP) } }
+                        }
+                        SwitchRow("Dim events after they end", s.dimFinished) { v -> edit { it.copy(dimFinished = v) } }
+                        if (s.dimFinished) {
+                            SliderRow(
+                                "Dim ${s.dimOffsetMinutes} min after the end",
+                                s.dimOffsetMinutes.toFloat(),
+                                0f..MAX_OFFSET.toFloat(),
+                            ) { v -> edit { it.copy(dimOffsetMinutes = (v / STEP).toInt() * STEP) } }
+                        }
+                    }
+                }
+                item {
                     Section("Duplicates") {
                         SwitchRow(
                             "Hide duplicates across calendars",
@@ -164,103 +271,6 @@ private fun SettingsScreen(
                                 )
                             }
                         }
-                    }
-                }
-                item {
-                    Section("Finished events") {
-                        SwitchRow("Hide events after they end", s.hideFinished) { v ->
-                            edit { it.copy(hideFinished = v) }
-                        }
-                        if (s.hideFinished) {
-                            SliderRow(
-                                "Keep visible for ${s.hideOffsetMinutes} min after the end",
-                                s.hideOffsetMinutes.toFloat(),
-                                0f..MAX_OFFSET.toFloat(),
-                            ) { v -> edit { it.copy(hideOffsetMinutes = (v / STEP).toInt() * STEP) } }
-                        }
-                        SwitchRow("Dim events after they end", s.dimFinished) { v -> edit { it.copy(dimFinished = v) } }
-                        if (s.dimFinished) {
-                            SliderRow(
-                                "Dim ${s.dimOffsetMinutes} min after the end",
-                                s.dimOffsetMinutes.toFloat(),
-                                0f..MAX_OFFSET.toFloat(),
-                            ) { v -> edit { it.copy(dimOffsetMinutes = (v / STEP).toInt() * STEP) } }
-                        }
-                    }
-                }
-                item {
-                    Section("Calendars") {
-                        state.calendars.forEach { cal -> CalendarRow(cal, s) { change -> edit(change) } }
-                    }
-                }
-                item {
-                    Section("Presets") {
-                        FlowRow(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Preset.entries.forEach { p ->
-                                AssistChip(onClick = { edit(p.apply) }, label = { Text(p.label) })
-                            }
-                        }
-                    }
-                }
-                item {
-                    Section("Display") {
-                        SliderRow(
-                            "Days ahead: ${s.daysAhead}",
-                            s.daysAhead.toFloat(),
-                            1f..MAX_DAYS.toFloat(),
-                            MAX_DAYS - 2,
-                        ) { v ->
-                            edit { it.copy(daysAhead = v.toInt()) }
-                        }
-                        SliderRow("Text size: ${(s.textScale * 100).roundToInt()}%", s.textScale, 0.8f..1.5f) { v ->
-                            edit { it.copy(textScale = v) }
-                        }
-                        SliderRow(
-                            "Widget background: ${(s.backgroundOpacity * 100).roundToInt()}%",
-                            s.backgroundOpacity,
-                            0f..1f,
-                            OPACITY_STEPS,
-                        ) { v ->
-                            edit { it.copy(backgroundOpacity = v) }
-                        }
-                        EnumChoice("Layout", s.layout) { l -> edit { it.copy(layout = l) } }
-                        if (s.layout == WidgetLayout.LIST) {
-                            SwitchRow("Always show end times", s.alwaysShowEndTime) { v ->
-                                edit { it.copy(alwaysShowEndTime = v) }
-                            }
-                        }
-                        EnumChoice("Widget theme", s.themeMode) { m -> edit { it.copy(themeMode = m) } }
-                        SliderRow(
-                            "Corner radius: ${s.cornerRadius} dp",
-                            s.cornerRadius.toFloat(),
-                            0f..MAX_RADIUS.toFloat(),
-                            MAX_RADIUS / RADIUS_STEP - 1,
-                        ) { v -> edit { it.copy(cornerRadius = v.roundToInt()) } }
-                        EnumChoice("Spacing", s.density) { d -> edit { it.copy(density = d) } }
-                        SliderRow(
-                            "Events per day: ${if (s.maxEventsPerDay == 0) "no limit" else s.maxEventsPerDay}",
-                            (if (s.maxEventsPerDay == 0) NO_LIMIT else s.maxEventsPerDay).toFloat(),
-                            1f..NO_LIMIT.toFloat(),
-                            NO_LIMIT - 2,
-                        ) { v -> edit { it.copy(maxEventsPerDay = v.roundToInt().takeIf { n -> n < NO_LIMIT } ?: 0) } }
-                        if (s.layout == WidgetLayout.CARDS) {
-                            SliderRow(
-                                "Date column width: ${s.dateColumnWidth} dp",
-                                s.dateColumnWidth.toFloat(),
-                                MIN_DATE_WIDTH.toFloat()..MAX_DATE_WIDTH.toFloat(),
-                                (MAX_DATE_WIDTH - MIN_DATE_WIDTH) / DATE_STEP - 1,
-                            ) { v -> edit { it.copy(dateColumnWidth = v.roundToInt()) } }
-                        }
-                        SwitchRow("Title and time on one line", s.singleLineCards) { v ->
-                            edit { it.copy(singleLineCards = v) }
-                        }
-                        SwitchRow("Week labels", s.weekDividers) { v -> edit { it.copy(weekDividers = v) } }
-                        SwitchRow("Show description", s.showDetails) { v -> edit { it.copy(showDetails = v) } }
-                        SwitchRow("Join link for video calls", s.tapToJoin) { v -> edit { it.copy(tapToJoin = v) } }
-                        SwitchRow("Hide declined events", s.hideDeclined) { v -> edit { it.copy(hideDeclined = v) } }
                     }
                 }
             }
@@ -423,47 +433,34 @@ private fun RegexEditor(
 }
 
 @Composable
+private fun AccountGroup(
+    account: String,
+    cals: List<CalInfo>,
+    s: AgendaSettings,
+    edit: ((AgendaSettings) -> AgendaSettings) -> Unit,
+) {
+    var open by rememberSaveable(account) { mutableStateOf(false) }
+    val shown = cals.count { it.id !in s.hiddenCalendarIds }
+    ListItem(
+        modifier = Modifier.clickable { open = !open },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        headlineContent = { Text(account) },
+        supportingContent = { Text("$shown of ${cals.size} shown") },
+        trailingContent = { Text(if (open) "▾" else "▸") },
+    )
+    if (open) cals.forEach { CalendarRow(it, s, edit) }
+}
+
+@Composable
 private fun CalendarRow(
     cal: CalInfo,
     s: AgendaSettings,
     edit: ((AgendaSettings) -> AgendaSettings) -> Unit,
 ) {
-    var menu by remember { mutableStateOf(false) }
     ListItem(
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         leadingContent = { Box(Modifier.size(14.dp).clip(CircleShape).background(Color(cal.color))) },
         headlineContent = { Text(cal.name) },
-        supportingContent = {
-            Column {
-                if (cal.account != cal.name) Text(cal.account)
-                Box {
-                    AssistChip(
-                        onClick = { menu = true },
-                        label = { Text("Hide after end: " + overrideLabel(s.calendarOffsets[cal.id])) },
-                    )
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        (listOf<Int?>(null, EventFilter.NEVER_HIDE) + OFFSET_CHOICES).forEach { choice ->
-                            DropdownMenuItem(
-                                text = { Text(overrideLabel(choice)) },
-                                onClick = {
-                                    menu = false
-                                    edit {
-                                        it.copy(
-                                            calendarOffsets =
-                                                if (choice == null) {
-                                                    it.calendarOffsets - cal.id
-                                                } else {
-                                                    it.calendarOffsets + (cal.id to choice)
-                                                },
-                                        )
-                                    }
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-        },
         trailingContent = {
             AgendaSwitch(cal.id !in s.hiddenCalendarIds) { show ->
                 edit {
@@ -475,16 +472,6 @@ private fun CalendarRow(
         },
     )
 }
-
-private val OFFSET_CHOICES = listOf(0, 15, 30, 60, 120)
-
-private fun overrideLabel(v: Int?) =
-    when (v) {
-        null -> "use default"
-        EventFilter.NEVER_HIDE -> "never"
-        0 -> "right away"
-        else -> "after $v min"
-    }
 
 /** Renders the real widget (not a copy) by running its Glance composition into a RemoteViews. */
 @OptIn(ExperimentalGlanceApi::class)
