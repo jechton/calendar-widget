@@ -20,6 +20,7 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +41,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -58,6 +61,7 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -80,6 +84,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.drawable.toBitmap
@@ -365,6 +370,7 @@ private fun AgendaSwitch(
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun SliderRow(
     label: String,
     value: Float,
@@ -374,7 +380,22 @@ private fun SliderRow(
 ) {
     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text(label)
-        Slider(value = value, onValueChange = onChange, valueRange = range, steps = steps)
+        val interaction = remember { MutableInteractionSource() }
+        Slider(
+            value = value,
+            onValueChange = onChange,
+            valueRange = range,
+            steps = steps,
+            interactionSource = interaction,
+            thumb = { SliderDefaults.Thumb(interaction, thumbSize = DpSize(4.dp, 24.dp)) },
+            track = {
+                SliderDefaults.Track(it, drawStopIndicator = null, drawTick = {
+                        _,
+                        _,
+                    ->
+                }, thumbTrackGapSize = 4.dp)
+            },
+        )
     }
 }
 
@@ -446,7 +467,7 @@ private fun AccountGroup(
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         headlineContent = { Text(account) },
         supportingContent = { Text("$shown of ${cals.size} shown") },
-        trailingContent = { Text(if (open) "▾" else "▸") },
+        trailingContent = { Icon(if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null) },
     )
     if (open) cals.forEach { CalendarRow(it, s, edit) }
 }
