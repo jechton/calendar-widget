@@ -54,11 +54,13 @@ import app.agenda.domain.AgendaSettings
 import app.agenda.domain.CalEvent
 import app.agenda.domain.EventFilter
 import app.agenda.domain.ThemeMode
+import app.agenda.domain.WidgetLayout
 import app.agenda.util.Fmt
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.time.format.TextStyle as DateTextStyle
 
@@ -67,6 +69,8 @@ const val PREVIEW_ROWS = "agenda-preview-rows"
 
 // Cards were 14dp inside a 24dp widget.
 private const val CARD_RADIUS_RATIO = 14f / 24f
+private const val STRIPE_ONE_LINE = 22f
+private const val STRIPE_TWO_LINES = 42f
 
 private val LocalTextScale = compositionLocalOf { 1f }
 
@@ -111,8 +115,18 @@ class AgendaWidget(private val preview: Boolean = false) : GlanceAppWidget() {
                                 .cornerRadius(settings.cornerRadius.dp)
                                 .padding(settings.density.outer.dp),
                     ) {
-                        Header(today)
-                        Spacer(GlanceModifier.height(8.dp))
+                        val list = settings.layout == WidgetLayout.LIST
+                        if (!list) {
+                            Header(today)
+                            Spacer(GlanceModifier.height(8.dp))
+                        }
+                        val section: @Composable (DayRow) -> Unit = {
+                            if (list) {
+                                ListDaySection(context, it, today, zone, settings, it.date == rows.first().date)
+                            } else {
+                                DaySection(context, it, today, zone, settings)
+                            }
+                        }
                         when {
                             !allowed -> Message("Calendar access needed. Tap to open Agenda.", openApp())
                             everythingEmpty -> Message("Nothing coming up.", openApp())
@@ -124,10 +138,10 @@ class AgendaWidget(private val preview: Boolean = false) : GlanceAppWidget() {
                                                 .fillMaxWidth()
                                                 .defaultWeight()
                                                 .semantics { contentDescription = PREVIEW_ROWS },
-                                    ) { rows.forEach { DaySection(context, it, today, zone, settings) } }
+                                    ) { rows.forEach { section(it) } }
                                 } else {
                                     LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
-                                        items(rows) { DaySection(context, it, today, zone, settings) }
+                                        items(rows) { section(it) }
                                     }
                                 }
                         }
@@ -187,20 +201,143 @@ private fun Header(today: LocalDate) {
             modifier = GlanceModifier.defaultWeight().clickable(openCalendar()),
             style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = sz(20), fontWeight = FontWeight.Medium),
         )
+        AddButton()
+    }
+}
+
+@Composable
+private fun AddButton() {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier =
+            GlanceModifier
+                .width(56.dp)
+                .height(32.dp)
+                .background(GlanceTheme.colors.primaryContainer)
+                .cornerRadius(16.dp)
+                .clickable(newEventAction()),
+    ) {
+        Text(
+            text = "+",
+            style = TextStyle(color = GlanceTheme.colors.onPrimaryContainer, fontSize = sz(22)),
+        )
+    }
+}
+
+@Composable
+private fun ListDaySection(
+    context: Context,
+    row: DayRow,
+    today: LocalDate,
+    zone: ZoneId,
+    s: AgendaSettings,
+    first: Boolean,
+) {
+    val label = DateTimeFormatter.ofPattern("EEE, MMM d", Locale.getDefault()).format(row.date)
+    Column(modifier = GlanceModifier.fillMaxWidth()) {
+        if (!first) {
+            Spacer(GlanceModifier.height(s.density.gap.dp))
+            Box(
+                modifier =
+                    GlanceModifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(GlanceTheme.colors.outline),
+            ) {}
+            Spacer(GlanceModifier.height(s.density.gap.dp))
+        }
+        Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = if (row.date == today) "Today, $label" else label,
+                modifier =
+                    GlanceModifier
+                        .defaultWeight()
+                        .clickable(openCalendar(row.date.atStartOfDay(zone).toInstant().toEpochMilli())),
+                style =
+                    TextStyle(
+                        color = GlanceTheme.colors.onSurface,
+                        fontSize = sz(18),
+                        fontWeight = FontWeight.Medium,
+                    ),
+            )
+            if (first) AddButton()
+        }
+        if (row.events.isEmpty()) {
+            Text(
+                text = "Nothing else today",
+                modifier = GlanceModifier.padding(vertical = s.density.gap.dp),
+                style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = sz(13)),
+            )
+        }
+        val shown = if (s.maxEventsPerDay > 0) row.events.take(s.maxEventsPerDay) else row.events
+        shown.forEach { ListEvent(context, it, row.date, s) }
+        val hidden = row.events.size - shown.size
+        if (hidden > 0) {
+            Text(
+                text = "+$hidden more",
+                modifier =
+                    GlanceModifier
+                        .padding(vertical = s.density.gap.dp)
+                        .clickable(openCalendar(row.date.atStartOfDay(zone).toInstant().toEpochMilli())),
+                style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = sz(12)),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ListEvent(
+    context: Context,
+    e: CalEvent,
+    date: LocalDate,
+    s: AgendaSettings,
+) {
+    val place = e.location.lineSequence().first()
+    val twoLines = place.isNotBlank() && !s.singleLineCards
+    // lazy: Glance has no stretch-to-row-height, so the stripe height is a per-line estimate scaled by text size.
+    val stripe = (if (twoLines) STRIPE_TWO_LINES else STRIPE_ONE_LINE) * LocalTextScale.current
+    Row(
+        modifier =
+            GlanceModifier
+                .fillMaxWidth()
+                .padding(vertical = s.density.cardPad.dp)
+                .clickable(viewEventAction(e)),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Box(
-            contentAlignment = Alignment.Center,
             modifier =
                 GlanceModifier
-                    .width(56.dp)
-                    .height(32.dp)
-                    .background(GlanceTheme.colors.primaryContainer)
-                    .cornerRadius(16.dp)
-                    .clickable(newEventAction()),
-        ) {
-            Text(
-                text = "+",
-                style = TextStyle(color = GlanceTheme.colors.onPrimaryContainer, fontSize = sz(22)),
-            )
+                    .width(4.dp)
+                    .height(stripe.dp)
+                    .background(ColorProvider(Color(e.color).copy(alpha = 1f)))
+                    .cornerRadius(2.dp),
+        ) {}
+        Spacer(GlanceModifier.width(8.dp))
+        Column {
+            Row {
+                Text(
+                    text = if (s.alwaysShowEndTime) Fmt.range(context, e, date) else Fmt.start(context, e, date),
+                    style =
+                        TextStyle(
+                            color = GlanceTheme.colors.onSurface,
+                            fontSize = sz(15),
+                            fontWeight = FontWeight.Bold,
+                        ),
+                )
+                Spacer(GlanceModifier.width(6.dp))
+                Text(
+                    text = Fmt.title(e, date),
+                    maxLines = 1,
+                    style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = sz(15)),
+                )
+            }
+            if (twoLines) {
+                Text(
+                    text = if (s.alwaysShowEndTime) place else "${Fmt.range(context, e, date)} $place",
+                    maxLines = 1,
+                    style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = sz(13)),
+                )
+            }
         }
     }
 }

@@ -31,6 +31,10 @@ enum class Density(val outer: Int, val gap: Int, val cardPad: Int) {
     SPACIOUS(16, 8, 12),
 }
 
+/** CARDS: coloured cards beside a date column. LIST: day headings with dividers and a colour stripe per event. */
+@Serializable
+enum class WidgetLayout { CARDS, LIST }
+
 @Serializable
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
@@ -56,6 +60,9 @@ data class AgendaSettings(
     val backgroundOpacity: Float = 1f,
     /** Widget corner radius in dp; event cards and the today pill follow it. */
     val cornerRadius: Int = 24,
+    val layout: WidgetLayout = WidgetLayout.CARDS,
+    /** List layout: show "10:30 – 11:30 AM" instead of just the start time. */
+    val alwaysShowEndTime: Boolean = false,
     val density: Density = Density.COMFORTABLE,
     /** 0 shows every event of a day. */
     val maxEventsPerDay: Int = 0,

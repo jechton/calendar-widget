@@ -93,6 +93,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.agenda.domain.AgendaSettings
 import app.agenda.domain.CalInfo
 import app.agenda.domain.EventFilter
+import app.agenda.domain.WidgetLayout
 import app.agenda.ui.AgendaTheme
 import app.agenda.widget.AgendaWidget
 import app.agenda.widget.PREVIEW_ROWS
@@ -204,6 +205,12 @@ private fun SettingsScreen(
                         ) { v ->
                             edit { it.copy(backgroundOpacity = v) }
                         }
+                        EnumChoice("Layout", s.layout) { l -> edit { it.copy(layout = l) } }
+                        if (s.layout == WidgetLayout.LIST) {
+                            SwitchRow("Always show end times", s.alwaysShowEndTime) { v ->
+                                edit { it.copy(alwaysShowEndTime = v) }
+                            }
+                        }
                         EnumChoice("Widget theme", s.themeMode) { m -> edit { it.copy(themeMode = m) } }
                         SliderRow(
                             "Corner radius: ${s.cornerRadius} dp",
@@ -218,12 +225,14 @@ private fun SettingsScreen(
                             1f..NO_LIMIT.toFloat(),
                             NO_LIMIT - 2,
                         ) { v -> edit { it.copy(maxEventsPerDay = v.roundToInt().takeIf { n -> n < NO_LIMIT } ?: 0) } }
-                        SliderRow(
-                            "Date column width: ${s.dateColumnWidth} dp",
-                            s.dateColumnWidth.toFloat(),
-                            MIN_DATE_WIDTH.toFloat()..MAX_DATE_WIDTH.toFloat(),
-                            (MAX_DATE_WIDTH - MIN_DATE_WIDTH) / DATE_STEP - 1,
-                        ) { v -> edit { it.copy(dateColumnWidth = v.roundToInt()) } }
+                        if (s.layout == WidgetLayout.CARDS) {
+                            SliderRow(
+                                "Date column width: ${s.dateColumnWidth} dp",
+                                s.dateColumnWidth.toFloat(),
+                                MIN_DATE_WIDTH.toFloat()..MAX_DATE_WIDTH.toFloat(),
+                                (MAX_DATE_WIDTH - MIN_DATE_WIDTH) / DATE_STEP - 1,
+                            ) { v -> edit { it.copy(dateColumnWidth = v.roundToInt()) } }
+                        }
                         SwitchRow("Title and time on one line", s.singleLineCards) { v ->
                             edit { it.copy(singleLineCards = v) }
                         }

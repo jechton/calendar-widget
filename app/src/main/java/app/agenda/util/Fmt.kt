@@ -44,6 +44,18 @@ object Fmt {
         return "${e.title} (Day ${ChronoUnit.DAYS.between(first, date) + 1}/$total)"
     }
 
+    /** Start time for the list layout, or [range] when the event has no start on this date. */
+    fun start(
+        context: Context,
+        e: CalEvent,
+        date: LocalDate,
+        zone: ZoneId = ZoneId.systemDefault(),
+    ): String {
+        if (e.allDay || span(e, zone).first < date) return range(context, e, date, zone)
+        val begin = Instant.ofEpochMilli(e.beginMillis).atZone(zone).toLocalTime()
+        return time(begin, DateFormat.is24HourFormat(context), true)
+    }
+
     /** "5:30 – 7:30 PM", "11 AM – 1 PM", or "All day". On multi-day events: the start time, "Until 4 PM", or "All day". */
     fun range(
         context: Context,
