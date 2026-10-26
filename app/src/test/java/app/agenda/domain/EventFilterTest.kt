@@ -45,9 +45,23 @@ class EventFilterTest {
     }
 
     @Test
-    fun keepsShortestTitleWhenAsked() {
+    fun moreInfoBeatsShorterTitle() {
+        val events = listOf(ev("Standup (Room 4)", 1, location = "Office"), ev("Standup", 2))
+        val s = AgendaSettings(ignoreRegexes = listOf("""\(.*?\)"""))
+        assertEquals(1L, EventFilter.dedupe(events, s).events.single().calendarId)
+    }
+
+    @Test
+    fun tieKeepsLongestTitleWhenAsked() {
         val events = listOf(ev("Standup (Room 4)", 1), ev("Standup", 2))
-        val s = AgendaSettings(ignoreRegexes = listOf("""\(.*?\)"""), keepPolicy = KeepPolicy.SHORTEST_TITLE)
+        val s = AgendaSettings(ignoreRegexes = listOf("""\(.*?\)"""), preferLongTitle = true)
+        assertEquals("Standup (Room 4)", EventFilter.dedupe(events, s).events.single().title)
+    }
+
+    @Test
+    fun tieKeepsShortestTitle() {
+        val events = listOf(ev("Standup (Room 4)", 1), ev("Standup", 2))
+        val s = AgendaSettings(ignoreRegexes = listOf("""\(.*?\)"""))
         assertEquals("Standup", EventFilter.dedupe(events, s).events.single().title)
     }
 

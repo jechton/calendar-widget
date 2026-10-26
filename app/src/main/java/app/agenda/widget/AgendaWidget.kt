@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.provider.CalendarContract
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
@@ -33,6 +35,8 @@ import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.width
+import androidx.glance.semantics.contentDescription
+import androidx.glance.semantics.semantics
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
@@ -42,14 +46,25 @@ import app.agenda.data.CalendarRepository
 import app.agenda.domain.CalEvent
 import app.agenda.domain.EventFilter
 import app.agenda.util.Fmt
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.util.Locale
 import java.time.format.TextStyle as DateTextStyle
 
+/** Marks the rows container in preview mode so the app can make just that part scroll. */
+const val PREVIEW_ROWS = "agenda-preview-rows"
+
+private val LocalTextScale = compositionLocalOf { 1f }
+
+@Composable
+private fun sz(size: Int) = (size * LocalTextScale.current).sp
+
 private data class DayRow(val date: LocalDate, val events: List<CalEvent>)
 
-class AgendaWidget : GlanceAppWidget() {
+/** [preview] swaps the lazy list for a plain column: a LazyColumn needs a bound widget id to fill in. */
+class AgendaWidget(private val preview: Boolean = false) : GlanceAppWidget() {
     override suspend fun provideGlance(
         context: Context,
         id: GlanceId,
@@ -68,24 +83,36 @@ class AgendaWidget : GlanceAppWidget() {
         val everythingEmpty = rows.all { it.events.isEmpty() }
 
         provideContent {
-            GlanceTheme {
-                Column(
-                    modifier =
-                        GlanceModifier
-                            .fillMaxSize()
-                            .background(GlanceTheme.colors.widgetBackground)
-                            .cornerRadius(24.dp)
-                            .padding(12.dp),
-                ) {
-                    Header(today)
-                    Spacer(GlanceModifier.height(8.dp))
-                    when {
-                        !allowed -> Message("Calendar access needed. Tap to open Agenda.", openApp())
-                        everythingEmpty -> Message("Nothing coming up.", openApp())
-                        else ->
-                            LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
-                                items(rows) { DaySection(context, it, today, zone) }
-                            }
+            CompositionLocalProvider(LocalTextScale provides (snapshot?.settings?.textScale ?: 1f)) {
+                GlanceTheme {
+                    Column(
+                        modifier =
+                            GlanceModifier
+                                .fillMaxSize()
+                                .background(GlanceTheme.colors.widgetBackground)
+                                .cornerRadius(24.dp)
+                                .padding(12.dp),
+                    ) {
+                        Header(today)
+                        Spacer(GlanceModifier.height(8.dp))
+                        when {
+                            !allowed -> Message("Calendar access needed. Tap to open Agenda.", openApp())
+                            everythingEmpty -> Message("Nothing coming up.", openApp())
+                            else ->
+                                if (preview) {
+                                    Column(
+                                        modifier =
+                                            GlanceModifier
+                                                .fillMaxWidth()
+                                                .defaultWeight()
+                                                .semantics { contentDescription = PREVIEW_ROWS },
+                                    ) { rows.forEach { DaySection(context, it, today, zone) } }
+                                } else {
+                                    LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
+                                        items(rows) { DaySection(context, it, today, zone) }
+                                    }
+                                }
+                        }
                     }
                 }
             }
@@ -95,27 +122,52 @@ class AgendaWidget : GlanceAppWidget() {
 
 private fun openApp(): Action = actionStartActivity<MainActivity>()
 
+private fun openCalendar(millis: Long = System.currentTimeMillis()): Action =
+    actionStartActivity(
+        Intent(
+            Intent.ACTION_VIEW,
+            CalendarContract.CONTENT_URI
+                .buildUpon()
+                .appendPath("time")
+                .appendPath(millis.toString())
+                .build(),
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+    )
+
 private fun newEventAction(): Action =
     actionStartActivity(
         Intent(Intent.ACTION_INSERT, CalendarContract.Events.CONTENT_URI)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
     )
 
-private fun viewEventAction(e: CalEvent): Action =
-    actionStartActivity(
+// The Calendar app looks all-day instances up by their stored UTC midnights, not our local-midnight copies.
+private fun localMidnightToUtc(millis: Long): Long =
+    Instant
+        .ofEpochMilli(millis)
+        .atZone(ZoneId.systemDefault())
+        .toLocalDate()
+        .atStartOfDay(ZoneOffset.UTC)
+        .toInstant()
+        .toEpochMilli()
+
+private fun viewEventAction(e: CalEvent): Action {
+    val begin = if (e.allDay) localMidnightToUtc(e.beginMillis) else e.beginMillis
+    val end = if (e.allDay) localMidnightToUtc(e.endMillis) else e.endMillis
+    return actionStartActivity(
         Intent(Intent.ACTION_VIEW, ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, e.id))
-            .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, e.beginMillis)
-            .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, e.endMillis)
+            .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, begin)
+            .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, end)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
     )
+}
 
 @Composable
 private fun Header(today: LocalDate) {
     Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = today.month.getDisplayName(DateTextStyle.FULL, Locale.getDefault()),
-            modifier = GlanceModifier.defaultWeight().clickable(openApp()),
-            style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 20.sp, fontWeight = FontWeight.Medium),
+            modifier = GlanceModifier.defaultWeight().clickable(openCalendar()),
+            style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = sz(20), fontWeight = FontWeight.Medium),
         )
         Box(
             contentAlignment = Alignment.Center,
@@ -129,7 +181,7 @@ private fun Header(today: LocalDate) {
         ) {
             Text(
                 text = "+",
-                style = TextStyle(color = GlanceTheme.colors.onPrimaryContainer, fontSize = 22.sp),
+                style = TextStyle(color = GlanceTheme.colors.onPrimaryContainer, fontSize = sz(22)),
             )
         }
     }
@@ -143,7 +195,7 @@ private fun Message(
     Text(
         text = text,
         modifier = GlanceModifier.fillMaxWidth().padding(8.dp).clickable(action),
-        style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 14.sp),
+        style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = sz(14)),
     )
 }
 
@@ -162,6 +214,7 @@ private fun DaySection(
                 GlanceModifier
                     .width(48.dp)
                     .padding(vertical = 4.dp)
+                    .clickable(openCalendar(row.date.atStartOfDay(zone).toInstant().toEpochMilli()))
                     .let {
                         if (isToday) it.background(GlanceTheme.colors.primaryContainer).cornerRadius(24.dp) else it
                     },
@@ -169,11 +222,11 @@ private fun DaySection(
             val color = if (isToday) GlanceTheme.colors.onPrimaryContainer else GlanceTheme.colors.onSurfaceVariant
             Text(
                 text = row.date.dayOfWeek.getDisplayName(DateTextStyle.SHORT, Locale.getDefault()),
-                style = TextStyle(color = color, fontSize = 12.sp),
+                style = TextStyle(color = color, fontSize = sz(12)),
             )
             Text(
                 text = row.date.dayOfMonth.toString(),
-                style = TextStyle(color = color, fontSize = 18.sp, fontWeight = FontWeight.Medium),
+                style = TextStyle(color = color, fontSize = sz(18), fontWeight = FontWeight.Medium),
             )
         }
         Spacer(GlanceModifier.width(8.dp))
@@ -182,10 +235,10 @@ private fun DaySection(
                 Text(
                     text = "Nothing else today",
                     modifier = GlanceModifier.padding(vertical = 8.dp),
-                    style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 13.sp),
+                    style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = sz(13)),
                 )
             }
-            row.events.forEach { EventCard(context, it) }
+            row.events.forEach { EventCard(context, it, row.date) }
         }
     }
 }
@@ -194,10 +247,12 @@ private fun DaySection(
 private fun EventCard(
     context: Context,
     e: CalEvent,
+    date: LocalDate,
 ) {
     val bg = Color(e.color).copy(alpha = 1f)
     val fg = if (bg.luminance() > 0.5f) Color.Black else Color.White
-    val sub = Fmt.range(context, e) + if (e.location.isNotBlank()) " at ${e.location.lineSequence().first()}" else ""
+    val place = if (e.location.isNotBlank()) " at ${e.location.lineSequence().first()}" else ""
+    val sub = Fmt.range(context, e, date) + place
     Column(
         modifier =
             GlanceModifier
@@ -214,14 +269,14 @@ private fun EventCard(
                     .clickable(viewEventAction(e)),
         ) {
             Text(
-                text = e.title,
+                text = Fmt.title(e, date),
                 maxLines = 1,
-                style = TextStyle(color = ColorProvider(fg), fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                style = TextStyle(color = ColorProvider(fg), fontSize = sz(15), fontWeight = FontWeight.Medium),
             )
             Text(
                 text = sub,
                 maxLines = 1,
-                style = TextStyle(color = ColorProvider(fg), fontSize = 13.sp),
+                style = TextStyle(color = ColorProvider(fg), fontSize = sz(13)),
             )
         }
     }

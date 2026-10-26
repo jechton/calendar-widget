@@ -45,20 +45,12 @@ object EventFilter {
             .values
             .forEach { group ->
                 val winner =
-                    when (settings.keepPolicy) {
-                        KeepPolicy.MOST_INFO ->
-                            group.sortedWith(
-                                compareByDescending<CalEvent> { info(it) }
-                                    .thenByDescending { it.title.length }
-                                    .thenBy { it.calendarId },
-                            )
-                        KeepPolicy.SHORTEST_TITLE ->
-                            group.sortedWith(
-                                compareBy<CalEvent> { it.title.length }
-                                    .thenByDescending { info(it) }
-                                    .thenBy { it.calendarId },
-                            )
-                    }.first()
+                    group
+                        .sortedWith(
+                            compareByDescending<CalEvent> { info(it) }
+                                .thenBy { if (settings.preferLongTitle) -it.title.length else it.title.length }
+                                .thenBy { it.calendarId },
+                        ).first()
                 kept += winner
                 if (group.size > 1) merges += Merge(winner, group - winner)
             }

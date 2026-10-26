@@ -24,15 +24,13 @@ data class CalInfo(
 )
 
 @Serializable
-enum class KeepPolicy { MOST_INFO, SHORTEST_TITLE }
-
-@Serializable
 data class AgendaSettings(
     val hiddenCalendarIds: Set<Long> = emptySet(),
     val dedupe: Boolean = true,
+    /** Among duplicates with equal info, keep the longer title instead of the shorter one. */
+    val preferLongTitle: Boolean = false,
     /** Removed from titles before comparing, so "Standup (Room 4)" matches "Standup". */
     val ignoreRegexes: List<String> = emptyList(),
-    val keepPolicy: KeepPolicy = KeepPolicy.MOST_INFO,
     val hideFinished: Boolean = true,
     /** Minutes to keep an event visible after it ends. */
     val hideOffsetMinutes: Int = 0,
@@ -40,4 +38,6 @@ data class AgendaSettings(
     val calendarOffsets: Map<Long, Int> = emptyMap(),
     val hideDeclined: Boolean = true,
     val daysAhead: Int = 7,
+    /** Multiplies every font size in the widget. */
+    val textScale: Float = 1f,
 )
