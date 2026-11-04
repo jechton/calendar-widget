@@ -13,6 +13,8 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
@@ -31,6 +33,7 @@ import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.lazy.LazyColumn
 import androidx.glance.appwidget.lazy.items
 import androidx.glance.appwidget.provideContent
+import androidx.glance.appwidget.updateAll
 import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
@@ -51,6 +54,7 @@ import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import app.agenda.MainActivity
 import app.agenda.data.CalendarRepository
+import app.agenda.data.Snapshot
 import app.agenda.domain.AgendaSettings
 import app.agenda.domain.CalEvent
 import app.agenda.domain.EventFilter
@@ -59,6 +63,8 @@ import app.agenda.domain.WidgetLayout
 import app.agenda.domain.detail
 import app.agenda.domain.joinUrl
 import app.agenda.util.Fmt
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -87,31 +93,55 @@ private fun sz(size: Int) = (size * LocalTextScale.current).sp
 
 private data class DayRow(val date: LocalDate, val events: List<CalEvent>)
 
+private data class WidgetData(
+    val allowed: Boolean,
+    val today: LocalDate,
+    val snapshot: Snapshot?,
+    val rows: List<DayRow>,
+    val settings: AgendaSettings,
+    val now: Long,
+)
+
+private val redraws = MutableStateFlow(0)
+
+private suspend fun load(context: Context): WidgetData {
+    val repo = CalendarRepository(context)
+    val allowed = repo.hasPermission()
+    val zone = ZoneId.systemDefault()
+    val today = LocalDate.now(zone)
+    val snapshot = if (allowed) repo.snapshot() else null
+    val rows =
+        snapshot?.let {
+            val byDay = EventFilter.groupByDay(it.result.events, today, it.settings.daysAhead, zone)
+            // Today always shows, and so does every gap day up to the last event.
+            val last = maxOf(today, byDay.keys.maxOrNull() ?: today)
+            generateSequence(today) { d -> d.plusDays(1).takeIf { it <= last } }
+                .map { d -> DayRow(d, byDay[d] ?: emptyList()) }
+                .toList()
+        } ?: emptyList()
+    val settings = snapshot?.settings ?: AgendaSettings()
+    return WidgetData(allowed, today, snapshot, rows, settings, System.currentTimeMillis())
+}
+
+/** Redraws every widget with fresh data, even when a Glance session is still alive. */
+suspend fun redrawWidgets(context: Context) {
+    redraws.update { it + 1 }
+    AgendaWidget().updateAll(context)
+}
+
 /** [preview] swaps the lazy list for a plain column: a LazyColumn needs a bound widget id to fill in. */
 class AgendaWidget(private val preview: Boolean = false) : GlanceAppWidget() {
     override suspend fun provideGlance(
         context: Context,
         id: GlanceId,
     ) {
-        val repo = CalendarRepository(context)
-        val allowed = repo.hasPermission()
-        val zone = ZoneId.systemDefault()
-        val today = LocalDate.now(zone)
-        val snapshot = if (allowed) repo.snapshot() else null
-        val rows =
-            snapshot?.let {
-                val byDay = EventFilter.groupByDay(it.result.events, today, it.settings.daysAhead, zone)
-                // Today always shows, and so does every gap day up to the last event.
-                val last = maxOf(today, byDay.keys.maxOrNull() ?: today)
-                generateSequence(today) { d -> d.plusDays(1).takeIf { it <= last } }
-                    .map { d -> DayRow(d, byDay[d] ?: emptyList()) }
-                    .toList()
-            } ?: emptyList()
-        val settings = snapshot?.settings ?: AgendaSettings()
-        val now = System.currentTimeMillis()
-        val everythingEmpty = rows.all { it.events.isEmpty() }
-
+        val first = load(context)
         provideContent {
+            // A live Glance session survives updateAll without re-running provideGlance, so reload on each tick.
+            val data by produceState(first) { redraws.collect { value = load(context) } }
+            val (allowed, today, snapshot, rows, settings, now) = data
+            val zone = ZoneId.systemDefault()
+            val everythingEmpty = rows.all { it.events.isEmpty() }
             CompositionLocalProvider(LocalTextScale provides settings.textScale, LocalNow provides now) {
                 WidgetTheme(settings.themeMode) {
                     val opacity = settings.backgroundOpacity

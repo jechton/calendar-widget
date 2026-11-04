@@ -7,5 +7,6 @@ class AgendaApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Refresh.ensurePeriodic(this)
+        Refresh.watchCalendar(this)
     }
 }

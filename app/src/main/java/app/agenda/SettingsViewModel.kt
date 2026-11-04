@@ -1,7 +1,6 @@
 package app.agenda
 
 import android.app.Application
-import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.agenda.data.CalendarRepository
@@ -9,7 +8,7 @@ import app.agenda.data.SettingsStore
 import app.agenda.domain.AgendaSettings
 import app.agenda.domain.CalInfo
 import app.agenda.domain.Merge
-import app.agenda.widget.AgendaWidget
+import app.agenda.widget.redrawWidgets
 import app.agenda.work.Refresh
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -52,7 +51,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         store.save(updated)
         _state.update { it.copy(settings = updated) }
         viewModelScope.launch {
-            AgendaWidget().updateAll(getApplication())
+            redrawWidgets(getApplication())
             Refresh.now(getApplication())
         }
         reload()

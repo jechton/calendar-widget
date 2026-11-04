@@ -3,7 +3,8 @@ package app.agenda.work
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import androidx.glance.appwidget.updateAll
+import android.provider.CalendarContract
+import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
@@ -12,13 +13,14 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import app.agenda.data.CalendarRepository
-import app.agenda.widget.AgendaWidget
+import app.agenda.widget.redrawWidgets
 import java.util.concurrent.TimeUnit
 
 /** Redraws the widget, then schedules the next redraw for when an event is due to drop off. */
 class RefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        AgendaWidget().updateAll(applicationContext)
+        redrawWidgets(applicationContext)
+        Refresh.watchCalendar(applicationContext)
         if (CalendarRepository(applicationContext).hasPermission()) {
             val next = CalendarRepository(applicationContext).snapshot().nextChangeMillis
             val delay = (next - System.currentTimeMillis()).coerceAtLeast(MIN_DELAY_MS)
@@ -37,12 +39,28 @@ object Refresh {
     private const val PERIODIC = "agenda-periodic"
     private const val BOUNDARY = "agenda-boundary"
     private const val NOW = "agenda-now"
+    private const val WATCH = "agenda-watch"
 
     /** Safety net for missed broadcasts; the boundary job handles the exact drop-off times. */
     fun ensurePeriodic(context: Context) {
         val request = PeriodicWorkRequestBuilder<RefreshWorker>(15, TimeUnit.MINUTES).build()
         WorkManager.getInstance(context)
             .enqueueUniquePeriodicWork(PERIODIC, ExistingPeriodicWorkPolicy.KEEP, request)
+    }
+
+    /** The PROVIDER_CHANGED broadcast is unreliable on modern Android; a content trigger fires once per change. */
+    fun watchCalendar(context: Context) {
+        val request =
+            OneTimeWorkRequestBuilder<RefreshWorker>()
+                .setConstraints(
+                    Constraints.Builder()
+                        .addContentUriTrigger(CalendarContract.CONTENT_URI, true)
+                        .setTriggerContentUpdateDelay(2, TimeUnit.SECONDS)
+                        .setTriggerContentMaxDelay(10, TimeUnit.SECONDS)
+                        .build(),
+                )
+                .build()
+        WorkManager.getInstance(context).enqueueUniqueWork(WATCH, ExistingWorkPolicy.REPLACE, request)
     }
 
     fun now(context: Context) {
