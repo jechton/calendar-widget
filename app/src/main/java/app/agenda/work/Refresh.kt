@@ -21,8 +21,9 @@ class RefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorke
     override suspend fun doWork(): Result {
         redrawWidgets(applicationContext)
         Refresh.watchCalendar(applicationContext)
-        if (CalendarRepository(applicationContext).hasPermission()) {
-            val next = CalendarRepository(applicationContext).snapshot().nextChangeMillis
+        val repo = CalendarRepository(applicationContext)
+        if (repo.hasPermission()) {
+            val next = repo.snapshot().nextChangeMillis
             val delay = (next - System.currentTimeMillis()).coerceAtLeast(MIN_DELAY_MS)
             Refresh.enqueueBoundary(applicationContext, delay + SLACK_MS)
         }
@@ -35,6 +36,11 @@ class RefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorke
     }
 }
 
+/**
+ * Starts the background jobs that keep the widget current. Android may kill a process at any time, so jobs go
+ * through WorkManager, which stores them and runs them later even after a restart. Each job has a unique name:
+ * enqueueing the same name again replaces or keeps the old job instead of piling up copies.
+ */
 object Refresh {
     private const val PERIODIC = "agenda-periodic"
     private const val BOUNDARY = "agenda-boundary"
@@ -63,11 +69,13 @@ object Refresh {
         WorkManager.getInstance(context).enqueueUniqueWork(WATCH, ExistingWorkPolicy.REPLACE, request)
     }
 
+    /** Redraw as soon as possible. */
     fun now(context: Context) {
         val request = OneTimeWorkRequestBuilder<RefreshWorker>().build()
         WorkManager.getInstance(context).enqueueUniqueWork(NOW, ExistingWorkPolicy.REPLACE, request)
     }
 
+    /** Redraw once after [delayMillis], when the next event is due to drop off the widget. */
     fun enqueueBoundary(
         context: Context,
         delayMillis: Long,
@@ -80,7 +88,11 @@ object Refresh {
     }
 }
 
-/** Calendar provider changes, clock changes and date rollover. */
+/**
+ * Receives system broadcasts: calendar provider changes, clock changes and date rollover.
+ * The filters are declared in AndroidManifest.xml. The work itself is handed to [Refresh] because a receiver
+ * must finish within a few seconds.
+ */
 class RefreshReceiver : BroadcastReceiver() {
     override fun onReceive(
         context: Context,

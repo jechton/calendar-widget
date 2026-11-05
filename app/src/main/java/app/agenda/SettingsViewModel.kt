@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+/** Everything the settings screen shows. The screen redraws whenever a new copy of this is published. */
 data class UiState(
     val permission: Boolean = false,
     val settings: AgendaSettings = AgendaSettings(),
@@ -24,6 +25,10 @@ data class UiState(
     val merges: List<Merge> = emptyList(),
 )
 
+/**
+ * Holds the settings screen's state. A ViewModel survives screen rotation, so the state is not rebuilt each time.
+ * The screen reads [state] and calls [edit] when the user changes something; it never writes settings itself.
+ */
 class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     private val store = SettingsStore(app)
     private val repo = CalendarRepository(app)
@@ -46,6 +51,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Applies [change] to the settings, saves them, and redraws the real widget on the home screen. */
     fun edit(change: (AgendaSettings) -> AgendaSettings) {
         val updated = change(_state.value.settings)
         store.save(updated)

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- The only permission: read-only access to the calendars on the phone. Granted by the user at runtime. -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
 
     <application
@@ -12,6 +13,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Agenda">
 
+        <!-- The settings screen. MAIN/LAUNCHER puts it in the app drawer; APPWIDGET_CONFIGURE lets the widget open it. -->
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -24,6 +26,7 @@
             </intent-filter>
         </activity>
 
+        <!-- The widget itself. The XML named below sets its size and what it is called in the widget picker. -->
         <receiver
             android:name=".widget.AgendaWidgetReceiver"
             android:exported="true"
@@ -36,6 +39,7 @@
                 android:resource="@xml/agenda_widget_info" />
         </receiver>
 
+        <!-- Wakes the app when the calendar changes or the clock/date changes, so the widget redraws. -->
         <receiver
             android:name=".work.RefreshReceiver"
             android:exported="true">

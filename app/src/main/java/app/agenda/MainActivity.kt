@@ -45,6 +45,11 @@ import app.agenda.ui.SynonymEditor
 import app.agenda.ui.WidgetPreview
 import kotlin.math.roundToInt
 
+/**
+ * The app's only screen. Android starts it two ways: from the launcher icon, and when a widget is added or
+ * reconfigured (APPWIDGET_CONFIGURE in the manifest). The UI is Jetpack Compose: [SettingsScreen] is a function that
+ * describes the screen from the current [UiState], and it is called again whenever that state changes.
+ */
 class MainActivity : ComponentActivity() {
     private val viewModel: SettingsViewModel by viewModels()
 
@@ -63,6 +68,11 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * Widget preview on top, then the settings grouped in sections. Every control calls [edit] with a function that
+ * returns a changed copy of the settings, e.g. `edit { it.copy(layout = l) }`. Settings are immutable; a change is
+ * always a new copy.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SettingsScreen(
