@@ -22,6 +22,8 @@ sandbox: rerun with `--max-workers=2`. Commits and PR titles use Conventional Co
   local midnights there, so the rest of the code works in one zone.
 - `AgendaWidget.provideGlance` reads settings and calendars itself on every update. `RefreshWorker` redraws and
   schedules the next run at `EventFilter.nextChange` (earliest end + offset, or midnight).
+- `ui/` holds the settings screen pieces split out of `MainActivity`. `docs/ANDROID_GUIDE.md` explains the Android
+  concepts for newcomers; keep it in step when the data flow changes.
 - Widget settings are global (one `AgendaSettings` JSON in SharedPreferences), edited in `MainActivity`.
 
 ## Not done
