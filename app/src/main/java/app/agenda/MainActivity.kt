@@ -1,109 +1,48 @@
 package app.agenda
 
 import android.Manifest
-import android.app.WallpaperManager
 import android.appwidget.AppWidgetManager
-import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
-import android.view.View
-import android.view.ViewGroup
-import android.widget.FrameLayout
-import android.widget.RemoteViews
-import android.widget.ScrollView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.InputChip
-import androidx.compose.material3.InputChipDefaults
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.graphics.drawable.toBitmap
-import androidx.core.view.children
-import androidx.glance.ExperimentalGlanceApi
-import androidx.glance.appwidget.AppWidgetId
-import androidx.glance.appwidget.runComposition
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.agenda.domain.AgendaSettings
-import app.agenda.domain.CalInfo
-import app.agenda.domain.EventFilter
 import app.agenda.domain.Preset
 import app.agenda.domain.WidgetLayout
+import app.agenda.ui.AccountGroup
 import app.agenda.ui.AgendaTheme
-import app.agenda.widget.AgendaWidget
-import app.agenda.widget.PREVIEW_ROWS
+import app.agenda.ui.EnumChoice
+import app.agenda.ui.RegexEditor
+import app.agenda.ui.Section
+import app.agenda.ui.SliderRow
+import app.agenda.ui.SwitchRow
+import app.agenda.ui.SynonymEditor
+import app.agenda.ui.WidgetPreview
 import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
@@ -311,350 +250,4 @@ private fun PermissionCard(onResult: () -> Unit) {
             }
         }
     }
-}
-
-/** A titled group of settings on a tonal surface. */
-@Composable
-private fun Section(
-    title: String,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Column {
-        Text(
-            title,
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(start = 16.dp, bottom = 8.dp),
-        )
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-            shape = MaterialTheme.shapes.extraLarge,
-        ) { Column(Modifier.padding(vertical = 8.dp), content = content) }
-    }
-}
-
-@Composable
-private fun SwitchRow(
-    label: String,
-    checked: Boolean,
-    supporting: String? = null,
-    onChange: (Boolean) -> Unit,
-) {
-    ListItem(
-        headlineContent = { Text(label) },
-        supportingContent = supporting?.let { { Text(it) } },
-        trailingContent = { AgendaSwitch(checked, onChange) },
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-    )
-}
-
-@Composable
-private fun AgendaSwitch(
-    checked: Boolean,
-    onChange: (Boolean) -> Unit,
-) {
-    Switch(
-        checked = checked,
-        onCheckedChange = onChange,
-        thumbContent =
-            if (checked) {
-                (
-                    {
-                        Icon(
-                            Icons.Default.Check,
-                            null,
-                            Modifier.size(SwitchDefaults.IconSize),
-                        )
-                    }
-                )
-            } else {
-                null
-            },
-    )
-}
-
-@Composable
-@OptIn(ExperimentalMaterial3Api::class)
-private fun SliderRow(
-    label: String,
-    value: Float,
-    range: ClosedFloatingPointRange<Float>,
-    steps: Int = 0,
-    onChange: (Float) -> Unit,
-) {
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Text(label)
-        val interaction = remember { MutableInteractionSource() }
-        Slider(
-            value = value,
-            onValueChange = onChange,
-            valueRange = range,
-            steps = steps,
-            interactionSource = interaction,
-            thumb = { SliderDefaults.Thumb(interaction, thumbSize = DpSize(4.dp, 24.dp)) },
-            track = {
-                SliderDefaults.Track(it, drawStopIndicator = null, drawTick = {
-                        _,
-                        _,
-                    ->
-                }, thumbTrackGapSize = 4.dp)
-            },
-        )
-    }
-}
-
-@Composable
-private fun RegexEditor(
-    patterns: List<String>,
-    onChange: (List<String>) -> Unit,
-) {
-    var draft by remember { mutableStateOf("") }
-    val invalid = EventFilter.invalidPatterns(patterns)
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("Ignore text when comparing titles (regex, case-insensitive)", style = MaterialTheme.typography.labelLarge)
-        Text(
-            "Example: \\(.*?\\) makes \"Standup (Room 4)\" match \"Standup\".",
-            style = MaterialTheme.typography.bodySmall,
-        )
-        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                patterns.forEach { p ->
-                    InputChip(
-                        selected = p in invalid,
-                        onClick = { onChange(patterns - p) },
-                        label = { Text(if (p in invalid) "$p  (invalid, ignored)" else p) },
-                        trailingIcon = {
-                            Icon(
-                                Icons.Default.Close,
-                                "Remove",
-                                Modifier.size(InputChipDefaults.IconSize),
-                            )
-                        },
-                    )
-                }
-            }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = draft,
-                onValueChange = { draft = it },
-                label = { Text("New pattern") },
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.width(8.dp))
-            FilledTonalButton(
-                enabled = draft.isNotBlank() && draft !in patterns,
-                onClick = {
-                    onChange(patterns + draft)
-                    draft = ""
-                },
-            ) { Text("Add") }
-        }
-    }
-}
-
-@Composable
-private fun SynonymEditor(
-    synonyms: List<String>,
-    onChange: (List<String>) -> Unit,
-) {
-    var draft by remember { mutableStateOf("") }
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("Synonyms: titles that count as the same event", style = MaterialTheme.typography.labelLarge)
-        Text(
-            "Separate titles with =. Start and end times must still match. Ignore patterns apply first.",
-            style = MaterialTheme.typography.bodySmall,
-        )
-        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                synonyms.forEach { line ->
-                    InputChip(
-                        selected = false,
-                        onClick = { onChange(synonyms - line) },
-                        label = { Text(line) },
-                        trailingIcon = {
-                            Icon(
-                                Icons.Default.Close,
-                                "Remove",
-                                Modifier.size(InputChipDefaults.IconSize),
-                            )
-                        },
-                    )
-                }
-            }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = draft,
-                onValueChange = { draft = it },
-                label = { Text("Title = other title") },
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.width(8.dp))
-            FilledTonalButton(
-                enabled = draft.contains('=') && draft.trim() !in synonyms,
-                onClick = {
-                    onChange(synonyms + draft.trim())
-                    draft = ""
-                },
-            ) { Text("Add") }
-        }
-    }
-}
-
-@Composable
-private fun AccountGroup(
-    account: String,
-    cals: List<CalInfo>,
-    s: AgendaSettings,
-    edit: ((AgendaSettings) -> AgendaSettings) -> Unit,
-) {
-    var open by rememberSaveable(account) { mutableStateOf(false) }
-    val shown = cals.count { it.id !in s.hiddenCalendarIds }
-    ListItem(
-        modifier = Modifier.clickable { open = !open },
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        headlineContent = { Text(account) },
-        supportingContent = { Text("$shown of ${cals.size} shown") },
-        trailingContent = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                AgendaSwitch(shown > 0) { show ->
-                    val ids = cals.map { it.id }.toSet()
-                    edit {
-                        it.copy(
-                            hiddenCalendarIds = if (show) it.hiddenCalendarIds - ids else it.hiddenCalendarIds + ids,
-                        )
-                    }
-                }
-                Icon(
-                    if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                    null,
-                    Modifier.padding(start = 8.dp),
-                )
-            }
-        },
-    )
-    if (open) cals.forEach { CalendarRow(it, s, edit) }
-}
-
-@Composable
-private fun CalendarRow(
-    cal: CalInfo,
-    s: AgendaSettings,
-    edit: ((AgendaSettings) -> AgendaSettings) -> Unit,
-) {
-    ListItem(
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        leadingContent = { Box(Modifier.size(14.dp).clip(CircleShape).background(Color(cal.color))) },
-        headlineContent = { Text(cal.name) },
-        trailingContent = {
-            AgendaSwitch(cal.id !in s.hiddenCalendarIds) { show ->
-                edit {
-                    it.copy(
-                        hiddenCalendarIds = if (show) it.hiddenCalendarIds - cal.id else it.hiddenCalendarIds + cal.id,
-                    )
-                }
-            }
-        },
-    )
-}
-
-/** Renders the real widget (not a copy) by running its Glance composition into a RemoteViews. */
-@OptIn(ExperimentalGlanceApi::class)
-@Composable
-private fun WidgetPreview(
-    settings: AgendaSettings,
-    modifier: Modifier = Modifier,
-) {
-    val context = LocalContext.current
-    // lazy: needs storage permission on some Android versions; falls back to a gradient so transparency still shows.
-    val wallpaper =
-        remember {
-            runCatching { WallpaperManager.getInstance(context).drawable?.toBitmap()?.asImageBitmap() }.getOrNull()
-        }
-    // Needs no permission (API 27+): the wallpaper's own palette stands in when the image itself is unreadable.
-    val backdrop = remember { wallpaperGradient(context) }
-    val views by produceState<RemoteViews?>(null, settings) {
-        AgendaWidget(preview = true).runComposition(context, AppWidgetId(PREVIEW_ID)).collect { value = it }
-    }
-    Box(modifier.fillMaxWidth().height(PREVIEW_HEIGHT.dp).clip(RoundedCornerShape(settings.cornerRadius.dp))) {
-        wallpaper?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
-            ?: Box(Modifier.fillMaxSize().background(Brush.linearGradient(backdrop)))
-        AndroidView(
-            factory = { FrameLayout(it) },
-            update = { host ->
-                host.removeAllViews()
-                views?.let { host.addView(it.apply(context, host).also(::disableClicks).also(::scrollRows)) }
-            },
-            modifier = Modifier.fillMaxSize().clipToBounds(),
-        )
-    }
-}
-
-/** Like the real widget list, only the rows scroll; the header and background stay put. */
-private fun scrollRows(root: View) {
-    val found = ArrayList<View>()
-    root.findViewsWithText(found, PREVIEW_ROWS, View.FIND_VIEWS_WITH_CONTENT_DESCRIPTION)
-    val rows = found.firstOrNull() ?: return
-    val parent = rows.parent as ViewGroup
-    val index = parent.indexOfChild(rows)
-    val params = rows.layoutParams
-    parent.removeView(rows)
-    val scroll =
-        ScrollView(rows.context).apply {
-            isVerticalScrollBarEnabled = false
-            addView(rows, FrameLayout.LayoutParams(MATCH, WRAP))
-        }
-    parent.addView(scroll, index, params)
-}
-
-/** The preview only shows the widget: drop its tap actions so it can be scrolled without leaving the app. */
-private fun disableClicks(view: View) {
-    view.setOnClickListener(null)
-    view.isClickable = false
-    (view as? ViewGroup)?.children?.forEach(::disableClicks)
-}
-
-private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
-private const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
-private const val PREVIEW_ID = -1
-private const val PREVIEW_HEIGHT = 260
-
-@Composable
-private inline fun <reified T : Enum<T>> EnumChoice(
-    label: String,
-    selected: T,
-    crossinline onChange: (T) -> Unit,
-) {
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Text(label)
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-            enumValues<T>().forEachIndexed { i, mode ->
-                SegmentedButton(
-                    selected = mode == selected,
-                    onClick = { onChange(mode) },
-                    shape = SegmentedButtonDefaults.itemShape(i, enumValues<T>().size),
-                    // The check icon eats the width long labels like "Comfortable" need.
-                    icon = {},
-                ) { Text(mode.name.lowercase().replaceFirstChar { it.uppercase() }, fontSize = 13.sp, maxLines = 1) }
-            }
-        }
-    }
-}
-
-private val FALLBACK_BACKDROP = listOf(Color(0xFF6A8CAF), Color(0xFFE0A96D))
-
-private fun wallpaperGradient(context: Context): List<Color> {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1) return FALLBACK_BACKDROP
-    val manager = WallpaperManager.getInstance(context)
-    val c = manager.getWallpaperColors(WallpaperManager.FLAG_SYSTEM) ?: return FALLBACK_BACKDROP
-    return listOfNotNull(c.primaryColor, c.secondaryColor, c.tertiaryColor).map { Color(it.toArgb()) }
 }
