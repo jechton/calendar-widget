@@ -10,6 +10,10 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
+/**
+ * Colors for the settings screen. On Android 12+ they come from the user's wallpaper (Material You, "dynamic color"),
+ * and on older versions from the stock Material 3 palette. Light or dark follows the system.
+ */
 @Composable
 fun AgendaTheme(content: @Composable () -> Unit) {
     val dark = isSystemInDarkTheme()

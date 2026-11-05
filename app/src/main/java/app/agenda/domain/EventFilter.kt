@@ -8,18 +8,27 @@ data class Merge(val kept: CalEvent, val dropped: List<CalEvent>)
 
 data class Dedupe(val events: List<CalEvent>, val merges: List<Merge>)
 
+/**
+ * All the rules for deciding what the widget shows. Plain Kotlin with no Android code, so it can be unit tested
+ * on a laptop (see EventFilterTest). Order of work: drop hidden calendars and finished events ([apply]), then
+ * merge duplicates ([dedupe]), then group by day ([groupByDay]).
+ */
 object EventFilter {
     private const val MINUTE = 60_000L
 
     private data class Key(val title: String, val begin: Long, val end: Long, val allDay: Boolean)
 
-    /** Invalid patterns are skipped; use [invalidPatterns] to report them. */
+    /** Turns the user's patterns into case-insensitive regexes. Invalid ones are skipped; see [invalidPatterns]. */
     fun compile(patterns: List<String>): List<Regex> =
         patterns.mapNotNull { runCatching { Regex(it, RegexOption.IGNORE_CASE) }.getOrNull() }
 
     fun invalidPatterns(patterns: List<String>): Set<String> =
         patterns.filter { runCatching { Regex(it) }.isFailure }.toSet()
 
+    /**
+     * The form of a title used to decide if two events match: patterns removed, spaces collapsed, lowercase.
+     * If the patterns remove everything, the plain lowercase title is used so the event keeps a key.
+     */
     fun normalizedTitle(
         title: String,
         regexes: List<Regex>,
@@ -46,6 +55,11 @@ object EventFilter {
 
     private fun info(e: CalEvent) = (if (e.location.isNotBlank()) 1 else 0) + (if (e.description.isNotBlank()) 1 else 0)
 
+    /**
+     * Merges events that share title (after [normalizedTitle] and synonyms), start, end and all-day flag.
+     * From each group one event is kept: join link first, then most info, then title length, then calendar id.
+     * [Dedupe.merges] records what was merged, for the preview in the settings screen.
+     */
     fun dedupe(
         events: List<CalEvent>,
         settings: AgendaSettings,
@@ -83,21 +97,20 @@ object EventFilter {
     private val ORDER = compareBy<CalEvent>({ !it.allDay }, { it.beginMillis }, { it.endMillis }, { it.title })
 
     /** Minutes after the end at which the event disappears, or null if it never does. */
-    private fun hideAfterMinutes(
-        e: CalEvent,
-        s: AgendaSettings,
-    ): Int? = s.hideOffsetMinutes.takeIf { s.hideFinished }
+    private fun hideAfterMinutes(s: AgendaSettings): Int? = s.hideOffsetMinutes.takeIf { s.hideFinished }
 
+    /** True once [now] is past the end time plus the hide delay. All-day events are never "finished" mid-day. */
     fun isFinished(
         e: CalEvent,
         s: AgendaSettings,
         now: Long,
     ): Boolean {
-        val offset = hideAfterMinutes(e, s) ?: return false
+        val offset = hideAfterMinutes(s) ?: return false
         // All-day events drop off with the day itself, not at a clock time.
         return !e.allDay && now >= e.endMillis + offset * MINUTE
     }
 
+    /** Same test as [isFinished], but for fading an event instead of hiding it. */
     fun isDimmed(
         e: CalEvent,
         s: AgendaSettings,
@@ -126,7 +139,7 @@ object EventFilter {
         val changes =
             events.filter { !it.allDay }.flatMap { e ->
                 listOfNotNull(
-                    hideAfterMinutes(e, s)?.let { e.endMillis + it * MINUTE },
+                    hideAfterMinutes(s)?.let { e.endMillis + it * MINUTE },
                     (e.endMillis + s.dimOffsetMinutes * MINUTE).takeIf { s.dimFinished },
                 )
             }.filter { it > now }
@@ -160,6 +173,7 @@ object EventFilter {
     }
 }
 
+/** Video call hosts that get a Join link. Add a host here to support another service. */
 private val JOIN_HOSTS = listOf("meet.google.com", "zoom.us", "teams.microsoft.com", "teams.live.com", "webex.com")
 private val JOIN_LINK =
     Regex("""https?://(?:[\w-]+\.)?(?:${JOIN_HOSTS.joinToString("|") { Regex.escape(it) }})/[^\s<>"]+""")

@@ -31,11 +31,42 @@ data class Snapshot(
 private const val UPCOMING_LOOKAHEAD_DAYS = 365L
 private const val DAY_MILLIS = 86_400_000L
 
+/** Identifies one entry in an account's event color palette. */
+private data class PaletteKey(val accountType: String?, val accountName: String?, val colorKey: String?)
+
+/**
+ * Positions of the columns requested in [CalendarRepository.events]. A database cursor hands values back by
+ * position, so these must stay in the same order as the projection array there.
+ */
+private object Col {
+    const val EVENT_ID = 0
+    const val CALENDAR_ID = 1
+    const val TITLE = 2
+    const val BEGIN = 3
+    const val END = 4
+    const val ALL_DAY = 5
+    const val LOCATION = 6
+    const val DESCRIPTION = 7
+    const val EVENT_COLOR = 8
+    const val CALENDAR_COLOR = 9
+    const val SELF_STATUS = 10
+    const val COLOR_KEY = 11
+    const val ACCOUNT_NAME = 12
+    const val ACCOUNT_TYPE = 13
+}
+
+/**
+ * Reads the phone's calendars through Android's Calendar Provider, the shared database that Google Calendar,
+ * Samsung Calendar and others sync into. Reading it needs the READ_CALENDAR permission, which the user grants
+ * in the app. Nothing here writes to the calendar.
+ */
 class CalendarRepository(private val context: Context) {
+    /** True once the user has granted calendar access. Every read below returns nothing without it. */
     fun hasPermission() =
         ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) ==
             PackageManager.PERMISSION_GRANTED
 
+    /** Every calendar on the phone, including ones the user has switched off in their calendar app. */
     suspend fun calendars(): List<CalInfo> =
         withContext(Dispatchers.IO) {
             if (!hasPermission()) return@withContext emptyList()
@@ -69,6 +100,7 @@ class CalendarRepository(private val context: Context) {
         zone: ZoneId,
         hideDeclined: Boolean,
     ): List<CalEvent> =
+        // Dispatchers.IO moves the database read off the main (UI) thread, which Android requires.
         withContext(Dispatchers.IO) {
             if (!hasPermission()) return@withContext emptyList()
             val uri =
@@ -94,7 +126,8 @@ class CalendarRepository(private val context: Context) {
                     CalendarContract.Calendars.ACCOUNT_TYPE,
                 )
             // Google syncs only a palette key for event colors; the real color lives in the Colors table.
-            val eventColors = mutableMapOf<Triple<String?, String?, String?>, Int>()
+            // Each account has its own palette, hence the three-part key.
+            val eventColors = mutableMapOf<PaletteKey, Int>()
             context.contentResolver.query(
                 CalendarContract.Colors.CONTENT_URI,
                 arrayOf(
@@ -107,34 +140,42 @@ class CalendarRepository(private val context: Context) {
                 null,
                 null,
             )?.use { c ->
-                while (c.moveToNext()) eventColors[Triple(c.getString(0), c.getString(1), c.getString(2))] = c.getInt(3)
+                while (c.moveToNext()) {
+                    val key = PaletteKey(c.getString(0), c.getString(1), c.getString(2))
+                    eventColors[key] = c.getInt(3)
+                }
             }
             val out = mutableListOf<CalEvent>()
             context.contentResolver.query(uri, projection, null, null, "${Instances.BEGIN} ASC")?.use { c ->
                 while (c.moveToNext()) {
-                    if (hideDeclined && c.getInt(10) == CalendarContract.Attendees.ATTENDEE_STATUS_DECLINED) continue
-                    val allDay = c.getInt(5) == 1
-                    var begin = c.getLong(3)
-                    var end = c.getLong(4)
+                    val declined = c.getInt(Col.SELF_STATUS) == CalendarContract.Attendees.ATTENDEE_STATUS_DECLINED
+                    if (hideDeclined && declined) continue
+                    val allDay = c.getInt(Col.ALL_DAY) == 1
+                    var begin = c.getLong(Col.BEGIN)
+                    var end = c.getLong(Col.END)
                     if (allDay) {
                         // All-day instances are stored as UTC midnights; shift to the same dates in local time.
                         begin = utcDateToLocalMillis(begin, zone)
                         end = utcDateToLocalMillis(end, zone)
                     }
-                    val own =
-                        eventColors[Triple(c.getString(13), c.getString(12), c.getString(11))]
-                            ?: c.getInt(8).takeIf { it != 0 }
-                    val color = own ?: c.getInt(9).takeIf { it != 0 } ?: Color.GRAY
+                    val paletteKey =
+                        PaletteKey(
+                            accountType = c.getString(Col.ACCOUNT_TYPE),
+                            accountName = c.getString(Col.ACCOUNT_NAME),
+                            colorKey = c.getString(Col.COLOR_KEY),
+                        )
+                    val own = eventColors[paletteKey] ?: c.getInt(Col.EVENT_COLOR).takeIf { it != 0 }
+                    val color = own ?: c.getInt(Col.CALENDAR_COLOR).takeIf { it != 0 } ?: Color.GRAY
                     out +=
                         CalEvent(
-                            id = c.getLong(0),
-                            calendarId = c.getLong(1),
-                            title = c.getString(2).orEmpty().ifBlank { "(No title)" },
+                            id = c.getLong(Col.EVENT_ID),
+                            calendarId = c.getLong(Col.CALENDAR_ID),
+                            title = c.getString(Col.TITLE).orEmpty().ifBlank { "(No title)" },
                             beginMillis = begin,
                             endMillis = end,
                             allDay = allDay,
-                            location = c.getString(6).orEmpty(),
-                            description = c.getString(7).orEmpty(),
+                            location = c.getString(Col.LOCATION).orEmpty(),
+                            description = c.getString(Col.DESCRIPTION).orEmpty(),
                             color = color,
                             ownColor = own != null,
                         )
@@ -143,6 +184,10 @@ class CalendarRepository(private val context: Context) {
             out
         }
 
+    /**
+     * Everything the widget needs for one draw: events for the window, filtered, plus when to redraw next.
+     * Reads the saved settings itself unless the caller passes some (the settings screen passes its own).
+     */
     suspend fun snapshot(
         settings: AgendaSettings = SettingsStore(context).load(),
         now: Long = System.currentTimeMillis(),
@@ -172,6 +217,7 @@ class CalendarRepository(private val context: Context) {
         return Snapshot(settings, result, EventFilter.nextChange(raw, settings, now, zone), upcoming)
     }
 
+    /** "2026-11-05 00:00 UTC" becomes "2026-11-05 00:00 in [zone]", so all-day events land on the right local day. */
     private fun utcDateToLocalMillis(
         utcMillis: Long,
         zone: ZoneId,
