@@ -13,8 +13,10 @@ Reads the calendars already on the phone (Google, Samsung, etc.), so there is no
 
 - Hides duplicate events across calendars: same title, start and end
 - Optional regex list that is ignored when comparing titles, so "Standup (Room 4)" and "Standup" merge
-- When merging, keep the event with the most info (location, notes, longest title) or the shortest title
-- Hides events once they have ended, with an optional delay (e.g. 60 min). Each calendar can override the delay or never hide
+- Synonyms (`Team meeting = Offsite sync`) make different titles count as one event when the times match
+- When merging, keep the copy with a join link, then the one with the most info (location, notes), then the shorter
+  title (or the longer one if you prefer)
+- Hides events once they have ended, with an optional delay (e.g. 60 min). The delay is global, not per calendar
 - Or dim them instead, with their own cutoff
 - Per-calendar show/hide, calendar colors, all-day events, declined events hidden
 - The settings screen lists what is being merged right now, to help tune regexes
@@ -30,7 +32,7 @@ Reads the calendars already on the phone (Google, Samsung, etc.), so there is no
 **Use**
 
 - Tap an event to open it in your calendar app. The + button creates a new event
-- "Join" link for Meet, Zoom, Teams and Webex events
+- "Join" link (with a camera icon) for Meet, Zoom, Teams and Webex events
 - Days with nothing on show "No events". With nothing in range, the widget names the next upcoming event
 
 Not in yet: Google Tasks. Android has no public provider for them, so it needs the Google Tasks API and sign-in.
@@ -67,5 +69,8 @@ app/src/main/java/app/agenda/
   data/     CalendarContract reader, settings storage
   widget/   Glance widget
   work/     refresh scheduling and broadcast receiver
-  MainActivity.kt, SettingsViewModel.kt   settings UI
+  ui/       settings screen pieces: rows, editors, calendar list, widget preview, theme
+  MainActivity.kt, SettingsViewModel.kt   settings screen and its state
 ```
+
+New to Android? Read [docs/ANDROID_GUIDE.md](docs/ANDROID_GUIDE.md).
