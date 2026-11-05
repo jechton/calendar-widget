@@ -48,6 +48,8 @@ data class AgendaSettings(
     val preferLongTitle: Boolean = false,
     /** Removed from titles before comparing, so "Standup (Room 4)" matches "Standup". */
     val ignoreRegexes: List<String> = emptyList(),
+    /** Lines like "Team meeting = Driftwood". Titles on one line count as the same event when comparing. */
+    val synonyms: List<String> = emptyList(),
     val hideFinished: Boolean = true,
     /** Minutes to keep an event visible after it ends. */
     val hideOffsetMinutes: Int = 0,

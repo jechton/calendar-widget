@@ -19,9 +19,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.glance.ColorFilter
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
+import androidx.glance.Image
+import androidx.glance.ImageProvider
 import androidx.glance.LocalContext
 import androidx.glance.action.Action
 import androidx.glance.action.actionStartActivity
@@ -44,6 +47,7 @@ import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
+import androidx.glance.layout.size
 import androidx.glance.layout.width
 import androidx.glance.material3.ColorProviders
 import androidx.glance.semantics.contentDescription
@@ -53,6 +57,7 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import app.agenda.MainActivity
+import app.agenda.R
 import app.agenda.data.CalendarRepository
 import app.agenda.data.Snapshot
 import app.agenda.domain.AgendaSettings
@@ -445,11 +450,22 @@ private fun JoinLink(
     url: String,
     color: ColorProvider,
 ) {
-    Text(
-        text = "Join",
+    Row(
         modifier = GlanceModifier.padding(start = 8.dp).clickable(joinAction(url)),
-        style = TextStyle(color = color, fontSize = sz(13), fontWeight = FontWeight.Bold),
-    )
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Image(
+            provider = ImageProvider(R.drawable.ic_videocam),
+            contentDescription = null,
+            colorFilter = ColorFilter.tint(color),
+            modifier = GlanceModifier.size(sz(16).value.dp),
+        )
+        Text(
+            text = "Join",
+            modifier = GlanceModifier.padding(start = 4.dp),
+            style = TextStyle(color = color, fontSize = sz(13), fontWeight = FontWeight.Bold),
+        )
+    }
 }
 
 @Composable
