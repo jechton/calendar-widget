@@ -221,6 +221,10 @@ class AgendaWidget(private val preview: Boolean = false) : GlanceAppWidget() {
     }
 }
 
+/** "Thu, Nov 5" in the user's language. */
+private fun shortDate(date: LocalDate): String =
+    DateTimeFormatter.ofPattern("EEE, MMM d", Locale.getDefault()).format(date)
+
 // Each of these returns an Action: what happens when the user taps. They start another app's screen via an Intent.
 private fun openApp(): Action = actionStartActivity<MainActivity>()
 
@@ -338,7 +342,7 @@ private fun ListDaySection(
     settings: AgendaSettings,
     first: Boolean,
 ) {
-    val label = DateTimeFormatter.ofPattern("EEE, MMM d", Locale.getDefault()).format(row.date)
+    val label = shortDate(row.date)
     Column(modifier = GlanceModifier.fillMaxWidth()) {
         if (!first) {
             Spacer(GlanceModifier.height(settings.density.gap.dp))
@@ -461,9 +465,7 @@ private fun EmptyState(
 ) {
     val days = if (daysAhead == 1) "today" else "the next $daysAhead days"
     if (next == null) return Message("Nothing in $days.", openApp())
-    val dayLabel =
-        DateTimeFormatter.ofPattern("EEE, MMM d", Locale.getDefault())
-            .format(Instant.ofEpochMilli(next.beginMillis).atZone(ZoneId.systemDefault()))
+    val dayLabel = shortDate(Instant.ofEpochMilli(next.beginMillis).atZone(ZoneId.systemDefault()).toLocalDate())
     Column(modifier = GlanceModifier.fillMaxWidth().padding(8.dp).clickable(viewEventAction(next))) {
         Text(
             text = "Nothing in $days.",
