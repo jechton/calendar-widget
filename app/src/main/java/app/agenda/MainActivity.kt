@@ -46,8 +46,8 @@ import app.agenda.domain.TimePosition
 import app.agenda.ui.AccountGroup
 import app.agenda.ui.AgendaTheme
 import app.agenda.ui.EnumChoice
+import app.agenda.ui.MoreMenu
 import app.agenda.ui.PreviewBackground
-import app.agenda.ui.PreviewBackgroundRows
 import app.agenda.ui.RegexEditor
 import app.agenda.ui.Section
 import app.agenda.ui.SliderRow
@@ -98,7 +98,10 @@ private fun SettingsScreen(
 ) {
     val s = state.settings
     Scaffold(topBar = {
-        TopAppBar(title = { Text("Agenda", style = MaterialTheme.typography.headlineSmall) })
+        TopAppBar(
+            title = { Text("Agenda", style = MaterialTheme.typography.headlineSmall) },
+            actions = { MoreMenu(background) },
+        )
     }) { padding ->
         Column(Modifier.padding(padding)) {
             WidgetPreview(s, background.image, Modifier.padding(horizontal = 16.dp))
@@ -110,7 +113,6 @@ private fun SettingsScreen(
                 if (!state.permission) {
                     item { PermissionCard(onPermission) }
                 }
-                item { Section("Preview background") { PreviewBackgroundRows(background) } }
                 item {
                     Section("Presets") {
                         FlowRow(

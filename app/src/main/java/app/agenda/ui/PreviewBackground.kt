@@ -7,22 +7,23 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import java.io.File
 
 /**
@@ -56,22 +57,46 @@ internal class PreviewBackground(private val context: Context) {
 
 private const val JPEG_QUALITY = 90
 
+/** The three-dots menu in the top bar: preview background image (pick or clear) and About. */
 @Composable
-internal fun PreviewBackgroundRows(bg: PreviewBackground) {
+internal fun MoreMenu(bg: PreviewBackground) {
+    val context = LocalContext.current
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { bg.pick(it) }
-    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            "Optional. Show your own wallpaper behind the preview so transparency looks right. " +
-                "Pick a screenshot of your home screen; no permission needed.",
-            style = MaterialTheme.typography.bodyMedium,
+    var open by remember { mutableStateOf(false) }
+    var about by remember { mutableStateOf(false) }
+    IconButton(onClick = { open = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More options") }
+    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        DropdownMenuItem(
+            text = { Text("Preview background image") },
+            onClick = {
+                open = false
+                picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            },
         )
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilledTonalButton(
+        if (bg.image != null) {
+            DropdownMenuItem(
+                text = { Text("Remove background image") },
                 onClick = {
-                    picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    open = false
+                    bg.reset()
                 },
-            ) { Text("Choose an image") }
-            if (bg.image != null) OutlinedButton(onClick = bg::reset) { Text("Reset") }
+            )
         }
+        DropdownMenuItem(
+            text = { Text("About") },
+            onClick = {
+                open = false
+                about = true
+            },
+        )
+    }
+    if (about) {
+        val version = context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        AlertDialog(
+            onDismissRequest = { about = false },
+            confirmButton = { TextButton(onClick = { about = false }) { Text("OK") } },
+            title = { Text("Agenda") },
+            text = { Text("Version $version") },
+        )
     }
 }
