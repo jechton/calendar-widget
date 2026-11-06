@@ -23,8 +23,9 @@ Reads the calendars already on the phone (Google, Samsung, etc.), so there is no
 
 **Look**
 
-- Cards or List layout (colour stripes, day dividers, Samsung-style second line with time range and place)
-- Presets: Cards, Samsung, Compact, Glass
+- Mix the look freely: day as a date column or a heading, events as a solid fill or a color stripe, time in front of
+  the title or in a second line, optional lines between days
+- Presets Google and Samsung are starting points; change any choice and it becomes your own mix
 - Light, dark or system theme, background opacity, corner radius, spacing, text size, date column width
 - Events per day limit, one-line cards, optional end times, week labels, description line
 - Live preview in the settings screen over your wallpaper

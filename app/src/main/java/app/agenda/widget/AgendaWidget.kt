@@ -62,9 +62,11 @@ import app.agenda.data.CalendarRepository
 import app.agenda.data.Snapshot
 import app.agenda.domain.AgendaSettings
 import app.agenda.domain.CalEvent
+import app.agenda.domain.DayLabel
 import app.agenda.domain.EventFilter
+import app.agenda.domain.EventLook
 import app.agenda.domain.ThemeMode
-import app.agenda.domain.WidgetLayout
+import app.agenda.domain.TimePosition
 import app.agenda.domain.detail
 import app.agenda.domain.joinUrl
 import app.agenda.util.Fmt
@@ -180,8 +182,8 @@ class AgendaWidget(private val preview: Boolean = false) : GlanceAppWidget() {
                                 .cornerRadius(settings.cornerRadius.dp)
                                 .padding(settings.density.outer.dp),
                     ) {
-                        val list = settings.layout == WidgetLayout.LIST
-                        if (!list) {
+                        val heading = settings.dayLabel == DayLabel.HEADING
+                        if (!heading) {
                             Header(today)
                             Spacer(GlanceModifier.height(8.dp))
                         }
@@ -189,10 +191,10 @@ class AgendaWidget(private val preview: Boolean = false) : GlanceAppWidget() {
                         val section: @Composable (DayRow) -> Unit = {
                             Column(modifier = GlanceModifier.fillMaxWidth()) {
                                 if (settings.weekDividers && it.date != firstDate) WeekLabel(it.date)
-                                if (list) {
-                                    ListDaySection(context, it, today, zone, settings, it.date == firstDate)
+                                if (heading) {
+                                    HeadingDay(context, it, today, zone, settings, it.date == firstDate)
                                 } else {
-                                    DaySection(context, it, today, zone, settings)
+                                    DateColumnDay(context, it, today, zone, settings)
                                 }
                             }
                         }
@@ -299,8 +301,8 @@ private fun AddButton() {
 }
 
 /**
- * The events of one day, shared by both layouts: an "empty day" note, the events (capped by the max-per-day setting),
- * and a "+N more" link. The layouts differ only in padding and in how one event is drawn ([event]).
+ * The events of one day, shared by both day styles: an "empty day" note, the events (capped by the max-per-day setting),
+ * and a "+N more" link. The day styles differ only in padding and in how one event is drawn ([event]).
  */
 @Composable
 private fun DayEvents(
@@ -334,7 +336,7 @@ private fun DayEvents(
 }
 
 @Composable
-private fun ListDaySection(
+private fun HeadingDay(
     context: Context,
     row: DayRow,
     today: LocalDate,
@@ -344,7 +346,8 @@ private fun ListDaySection(
 ) {
     val label = shortDate(row.date)
     Column(modifier = GlanceModifier.fillMaxWidth()) {
-        if (!first) {
+        if (!first && !settings.dayDividers) Spacer(GlanceModifier.height((settings.density.gap * 2).dp))
+        if (!first && settings.dayDividers) {
             Spacer(GlanceModifier.height(settings.density.gap.dp))
             Box(
                 modifier =
@@ -375,6 +378,8 @@ private fun ListDaySection(
             )
             if (first) AddButton()
         }
+        // The + button is taller than the heading text, so give a filled first event some room below it.
+        if (first && settings.eventLook == EventLook.SOLID) Spacer(GlanceModifier.height(6.dp))
         DayEvents(
             row = row,
             today = today,
@@ -382,66 +387,126 @@ private fun ListDaySection(
             settings = settings,
             emptyPadding = GlanceModifier.padding(vertical = settings.density.gap.dp),
             morePadding = GlanceModifier.padding(vertical = settings.density.gap.dp),
-        ) { ListEvent(context, it, row.date, settings) }
+        ) { EventRow(context, it, row.date, settings) }
     }
 }
 
+/**
+ * One event. Three independent choices shape it: the look ([EventLook]: solid fill or stripe), where the time goes
+ * ([TimePosition]), and the one-line, end-time and description settings. [EventText] writes the words.
+ */
 @Composable
-private fun ListEvent(
+private fun EventRow(
     context: Context,
     e: CalEvent,
     date: LocalDate,
     settings: AgendaSettings,
 ) {
-    val place = e.location.lineSequence().first()
     val dim = EventFilter.isDimmed(e, settings, LocalNow.current)
+    val solid = settings.eventLook == EventLook.SOLID
+    val fill = Color(e.color)
+    // On a solid fill, text is black or white by the fill's brightness. Otherwise it follows the widget theme.
+    val fg = if (fill.luminance() > 0.5f) Color.Black else Color.White
+    val solidText = ColorProvider(if (dim) fg.copy(alpha = DIM_ALPHA + 0.2f) else fg)
+    val main = if (solid) solidText else GlanceTheme.colors.onSurface.dimmed(dim)
+    val sub = if (solid) solidText else GlanceTheme.colors.onSurfaceVariant.dimmed(dim)
+    val joinColor = if (solid) solidText else GlanceTheme.colors.primary
     val join = e.joinUrl().takeIf { settings.tapToJoin && !dim }
-    val detail = e.detail().takeIf { settings.showDetails && it.isNotEmpty() }
-    val twoLines = place.isNotBlank() && !settings.singleLineCards
-    // lazy: Glance has no stretch-to-row-height, so the stripe is a fixed one-line height (the title line, as in Samsung).
-    val stripe = STRIPE_ONE_LINE * LocalTextScale.current
-    val main = GlanceTheme.colors.onSurface.dimmed(dim)
-    val sub = GlanceTheme.colors.onSurfaceVariant.dimmed(dim)
-    Row(
-        modifier =
-            GlanceModifier
-                .fillMaxWidth()
-                .padding(vertical = settings.density.cardPad.dp)
-                .clickable(viewEventAction(e)),
-        verticalAlignment = Alignment.Top,
-    ) {
-        Box(
+    val colors = EventColors(main, sub, joinColor)
+    if (solid) {
+        Column(modifier = GlanceModifier.fillMaxWidth().padding(bottom = settings.density.gap.dp)) {
+            EventText(
+                modifier =
+                    GlanceModifier
+                        .fillMaxWidth()
+                        .background(ColorProvider(fill.copy(alpha = if (dim) DIM_ALPHA else 1f)))
+                        .cornerRadius((settings.cornerRadius * CARD_RADIUS_RATIO).dp)
+                        .padding(horizontal = 12.dp, vertical = settings.density.cardPad.dp)
+                        .clickable(viewEventAction(e)),
+                context = context,
+                e = e,
+                date = date,
+                settings = settings,
+                colors = colors,
+                join = join,
+            )
+        }
+    } else {
+        // Glance has no stretch-to-row-height, so the stripe is a fixed one-line height (the title line, as in Samsung).
+        val stripe = STRIPE_ONE_LINE * LocalTextScale.current
+        Row(
             modifier =
                 GlanceModifier
-                    .width(4.dp)
-                    .height(stripe.dp)
-                    .background(ColorProvider(Color(e.color).copy(alpha = if (dim) DIM_ALPHA else 1f)))
-                    .cornerRadius(2.dp),
-        ) {}
-        Spacer(GlanceModifier.width(8.dp))
+                    .fillMaxWidth()
+                    .padding(vertical = settings.density.cardPad.dp)
+                    .clickable(viewEventAction(e)),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Box(
+                modifier =
+                    GlanceModifier
+                        .width(4.dp)
+                        .height(stripe.dp)
+                        .background(ColorProvider(fill.copy(alpha = if (dim) DIM_ALPHA else 1f)))
+                        .cornerRadius(2.dp),
+            ) {}
+            Spacer(GlanceModifier.width(8.dp))
+            EventText(GlanceModifier.defaultWeight(), context, e, date, settings, colors, join)
+        }
+    }
+}
+
+/** The three text colors an event uses: title and time, the lines under them, and the Join link. */
+private data class EventColors(val main: ColorProvider, val sub: ColorProvider, val join: ColorProvider)
+
+/** The words of one event, laid out by [TimePosition]. [modifier] carries the look (fill, padding, tap action). */
+@Composable
+private fun EventText(
+    modifier: GlanceModifier,
+    context: Context,
+    e: CalEvent,
+    date: LocalDate,
+    settings: AgendaSettings,
+    colors: EventColors,
+    join: String?,
+) {
+    val place = e.location.lineSequence().first()
+    val range = Fmt.range(context, e, date)
+    val detail = e.detail().takeIf { settings.showDetails && it.isNotEmpty() }
+    val subStyle = TextStyle(color = colors.sub, fontSize = sz(13))
+    if (settings.timePosition == TimePosition.LEFT) {
         // Time on the left, then a column so the second line lines up under the title, as in Samsung's calendar.
-        Row(modifier = GlanceModifier.defaultWeight()) {
+        val secondLine = place.isNotBlank() && !settings.singleLineCards
+        Row(modifier = modifier) {
             Text(
-                text = if (settings.alwaysShowEndTime) Fmt.range(context, e, date) else Fmt.start(context, e, date),
-                style = TextStyle(color = main, fontSize = sz(15), fontWeight = FontWeight.Bold),
+                text = if (settings.alwaysShowEndTime) range else Fmt.start(context, e, date),
+                style = TextStyle(color = colors.main, fontSize = sz(15), fontWeight = FontWeight.Bold),
             )
             Spacer(GlanceModifier.width(6.dp))
             Column(modifier = GlanceModifier.defaultWeight()) {
-                Text(
-                    text = Fmt.title(e, date),
-                    maxLines = 1,
-                    style = TextStyle(color = main, fontSize = sz(15)),
-                )
-                if (twoLines) {
-                    Text(
-                        text = if (settings.alwaysShowEndTime) place else "${Fmt.range(context, e, date)} $place",
-                        maxLines = 1,
-                        style = TextStyle(color = sub, fontSize = sz(13)),
-                    )
+                Text(Fmt.title(e, date), maxLines = 1, style = TextStyle(color = colors.main, fontSize = sz(15)))
+                if (secondLine) {
+                    Text(if (settings.alwaysShowEndTime) place else "$range $place", maxLines = 1, style = subStyle)
                 }
-                if (detail != null) Text(detail, maxLines = 1, style = TextStyle(color = sub, fontSize = sz(13)))
+                if (detail != null) Text(detail, maxLines = 1, style = subStyle)
             }
-            if (join != null) JoinLink(join, GlanceTheme.colors.primary)
+            if (join != null) JoinLink(join, colors.join)
+        }
+    } else {
+        val title = TextStyle(color = colors.main, fontSize = sz(15), fontWeight = FontWeight.Medium)
+        Column(modifier = modifier) {
+            Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(Fmt.title(e, date), GlanceModifier.defaultWeight(), maxLines = 1, style = title)
+                if (settings.singleLineCards) {
+                    Spacer(GlanceModifier.width(8.dp))
+                    Text(range, maxLines = 1, style = subStyle)
+                }
+                if (join != null) JoinLink(join, colors.join)
+            }
+            if (!settings.singleLineCards) {
+                Text(if (place.isNotBlank()) "$range at $place" else range, maxLines = 1, style = subStyle)
+            }
+            if (detail != null) Text(detail, maxLines = 1, style = subStyle)
         }
     }
 }
@@ -523,7 +588,7 @@ private fun Message(
 }
 
 @Composable
-private fun DaySection(
+private fun DateColumnDay(
     context: Context,
     row: DayRow,
     today: LocalDate,
@@ -570,54 +635,7 @@ private fun DaySection(
                 settings = settings,
                 emptyPadding = GlanceModifier.padding(vertical = 8.dp),
                 morePadding = GlanceModifier.padding(bottom = settings.density.gap.dp),
-            ) { EventCard(context, it, row.date, settings) }
-        }
-    }
-}
-
-@Composable
-private fun EventCard(
-    context: Context,
-    e: CalEvent,
-    date: LocalDate,
-    settings: AgendaSettings,
-) {
-    val dim = EventFilter.isDimmed(e, settings, LocalNow.current)
-    val join = e.joinUrl().takeIf { settings.tapToJoin && !dim }
-    val bg = Color(e.color).copy(alpha = if (dim) DIM_ALPHA else 1f)
-    val fg = if (Color(e.color).luminance() > 0.5f) Color.Black else Color.White
-    val fgColor = ColorProvider(if (dim) fg.copy(alpha = DIM_ALPHA + 0.2f) else fg)
-    val place = if (e.location.isNotBlank()) " at ${e.location.lineSequence().first()}" else ""
-    val time = Fmt.range(context, e, date)
-    val sub = time + place
-    val title = TextStyle(color = fgColor, fontSize = sz(15), fontWeight = FontWeight.Medium)
-    val detail = TextStyle(color = fgColor, fontSize = sz(13))
-    val more = e.detail().takeIf { settings.showDetails && it.isNotEmpty() }
-    Column(
-        modifier =
-            GlanceModifier
-                .fillMaxWidth()
-                .padding(bottom = settings.density.gap.dp),
-    ) {
-        Column(
-            modifier =
-                GlanceModifier
-                    .fillMaxWidth()
-                    .background(ColorProvider(bg))
-                    .cornerRadius((settings.cornerRadius * CARD_RADIUS_RATIO).dp)
-                    .padding(horizontal = 12.dp, vertical = settings.density.cardPad.dp)
-                    .clickable(viewEventAction(e)),
-        ) {
-            Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(Fmt.title(e, date), GlanceModifier.defaultWeight(), maxLines = 1, style = title)
-                if (settings.singleLineCards) {
-                    Spacer(GlanceModifier.width(8.dp))
-                    Text(time, maxLines = 1, style = detail)
-                }
-                if (join != null) JoinLink(join, fgColor)
-            }
-            if (!settings.singleLineCards) Text(sub, maxLines = 1, style = detail)
-            if (more != null) Text(more, maxLines = 1, style = detail)
+            ) { EventRow(context, it, row.date, settings) }
         }
     }
 }

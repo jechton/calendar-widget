@@ -72,7 +72,7 @@ Database reads must not run on the main thread, or the screen freezes. Hence `wi
     |            '-- EventFilter.apply()  drops hidden and finished events, merges duplicates
     |  EventFilter.groupByDay()          one DayRow per day
     v
- composables draw the rows (DaySection / ListDaySection, EventCard / ListEvent)
+ composables draw the rows (DateColumnDay or HeadingDay, each calling EventRow)
 ```
 
 `domain/EventFilter.kt` is the part to read first if you want to understand the behavior. It has no Android code,
