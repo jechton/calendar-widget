@@ -265,6 +265,7 @@ private fun SettingsScreen(
                             edit { it.copy(preferLongTitle = v) }
                         }
                         RegexEditor(s.ignoreRegexes) { list -> edit { it.copy(ignoreRegexes = list) } }
+                        SynonymEditor(s.synonyms) { list -> edit { it.copy(synonyms = list) } }
                         if (state.merges.isNotEmpty()) {
                             Text(
                                 "Merged right now",
@@ -449,6 +450,59 @@ private fun RegexEditor(
                 enabled = draft.isNotBlank() && draft !in patterns,
                 onClick = {
                     onChange(patterns + draft)
+                    draft = ""
+                },
+            ) { Text("Add") }
+        }
+    }
+}
+
+@Composable
+private fun SynonymEditor(
+    synonyms: List<String>,
+    onChange: (List<String>) -> Unit,
+) {
+    var draft by remember { mutableStateOf("") }
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("Synonyms: titles that count as the same event", style = MaterialTheme.typography.labelLarge)
+        Text(
+            "Separate titles with =. Start and end times must still match. Ignore patterns apply first.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                synonyms.forEach { line ->
+                    InputChip(
+                        selected = false,
+                        onClick = { onChange(synonyms - line) },
+                        label = { Text(line) },
+                        trailingIcon = {
+                            Icon(
+                                Icons.Default.Close,
+                                "Remove",
+                                Modifier.size(InputChipDefaults.IconSize),
+                            )
+                        },
+                    )
+                }
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = draft,
+                onValueChange = { draft = it },
+                label = { Text("Title = other title") },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(8.dp))
+            FilledTonalButton(
+                enabled = draft.contains('=') && draft.trim() !in synonyms,
+                onClick = {
+                    onChange(synonyms + draft.trim())
                     draft = ""
                 },
             ) { Text("Add") }

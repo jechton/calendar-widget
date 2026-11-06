@@ -30,6 +30,24 @@ class EventFilterTest {
     }
 
     @Test
+    fun synonymsMergeDifferentTitlesAndKeepTheJoinLink() {
+        val events =
+            listOf(ev("[J] Sync B", 1, description = "notes"), ev("Sync A", 2, location = "https://zoom.us/j/1"))
+        val s = AgendaSettings(synonyms = listOf("sync a = [J] Sync B"))
+        val r = EventFilter.dedupe(events, s)
+        assertEquals(1, r.events.size)
+        assertEquals("Sync A", r.events[0].title)
+        assertEquals(2, EventFilter.dedupe(events, AgendaSettings()).events.size)
+    }
+
+    @Test
+    fun synonymsApplyAfterIgnorePatterns() {
+        val events = listOf(ev("Sync A (Room 4)", 1), ev("Other", 2))
+        val s = AgendaSettings(ignoreRegexes = listOf("""\(.*?\)"""), synonyms = listOf("Sync A = Other"))
+        assertEquals(1, EventFilter.dedupe(events, s).events.size)
+    }
+
+    @Test
     fun differentTimesAreNotDuplicates() {
         val r = EventFilter.dedupe(listOf(ev("Dinner"), ev("Dinner", 2, end = 13 * hour)), AgendaSettings())
         assertEquals(2, r.events.size)

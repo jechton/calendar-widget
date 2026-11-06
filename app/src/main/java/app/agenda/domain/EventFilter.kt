@@ -29,6 +29,21 @@ object EventFilter {
         return clean.ifEmpty { title.trim().lowercase() }
     }
 
+    /** Maps each normalized synonym to the first title of its line. Lines look like "a = b = c". */
+    fun synonymMap(
+        synonyms: List<String>,
+        regexes: List<Regex>,
+    ): Map<String, String> {
+        val out = mutableMapOf<String, String>()
+        for (line in synonyms) {
+            val parts = line.split('=').map { it.trim() }.filter { it.isNotEmpty() }
+            val titles = parts.map { normalizedTitle(it, regexes) }
+            val head = titles.firstOrNull() ?: continue
+            titles.forEach { out.putIfAbsent(it, head) }
+        }
+        return out
+    }
+
     private fun info(e: CalEvent) = (if (e.location.isNotBlank()) 1 else 0) + (if (e.description.isNotBlank()) 1 else 0)
 
     fun dedupe(
@@ -37,15 +52,21 @@ object EventFilter {
     ): Dedupe {
         if (!settings.dedupe) return Dedupe(events, emptyList())
         val regexes = compile(settings.ignoreRegexes)
+        val synonyms = synonymMap(settings.synonyms, regexes)
         val kept = mutableListOf<CalEvent>()
         val merges = mutableListOf<Merge>()
-        events.groupBy { Key(normalizedTitle(it.title, regexes), it.beginMillis, it.endMillis, it.allDay) }
+        events.groupBy {
+            val title = normalizedTitle(it.title, regexes)
+            Key(synonyms[title] ?: title, it.beginMillis, it.endMillis, it.allDay)
+        }
             .values
             .forEach { group ->
                 val ranked =
                     group
                         .sortedWith(
-                            compareByDescending<CalEvent> { info(it) }
+                            // A copy with a join link wins, so the link survives the merge.
+                            compareByDescending<CalEvent> { it.joinUrl() != null }
+                                .thenByDescending { info(it) }
                                 .thenBy { if (settings.preferLongTitle) -it.title.length else it.title.length }
                                 .thenBy { it.calendarId },
                         )
