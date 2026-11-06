@@ -118,8 +118,8 @@ private fun SettingsScreen(
                         SliderRow(
                             "Corner radius: ${s.cornerRadius} dp",
                             s.cornerRadius.toFloat(),
-                            0f..MAX_RADIUS.toFloat(),
-                            MAX_RADIUS / RADIUS_STEP - 1,
+                            0f..MAX_CORNER_RADIUS.toFloat(),
+                            MAX_CORNER_RADIUS / CORNER_RADIUS_STEP - 1,
                         ) { v -> edit { it.copy(cornerRadius = v.roundToInt()) } }
                         if (s.layout == WidgetLayout.CARDS) {
                             SliderRow(
@@ -128,18 +128,20 @@ private fun SettingsScreen(
                                 MIN_DATE_WIDTH.toFloat()..MAX_DATE_WIDTH.toFloat(),
                                 (MAX_DATE_WIDTH - MIN_DATE_WIDTH) / DATE_STEP - 1,
                             ) { v -> edit { it.copy(dateColumnWidth = v.roundToInt()) } }
-                        }
-                        if (s.layout == WidgetLayout.CARDS) {
                             SwitchRow("Title and time on one line", s.singleLineCards) { v ->
                                 edit { it.copy(singleLineCards = v) }
                             }
                         }
                         SliderRow(
                             "Events per day: ${if (s.maxEventsPerDay == 0) "no limit" else s.maxEventsPerDay}",
-                            (if (s.maxEventsPerDay == 0) NO_LIMIT else s.maxEventsPerDay).toFloat(),
-                            1f..NO_LIMIT.toFloat(),
-                            NO_LIMIT - 2,
-                        ) { v -> edit { it.copy(maxEventsPerDay = v.roundToInt().takeIf { n -> n < NO_LIMIT } ?: 0) } }
+                            (if (s.maxEventsPerDay == 0) EVENTS_SLIDER_MAX else s.maxEventsPerDay).toFloat(),
+                            1f..EVENTS_SLIDER_MAX.toFloat(),
+                            EVENTS_SLIDER_MAX - 2,
+                        ) { v ->
+                            // The top of the slider means "no limit", stored as 0.
+                            val limit = v.roundToInt().takeIf { n -> n < EVENTS_SLIDER_MAX } ?: 0
+                            edit { it.copy(maxEventsPerDay = limit) }
+                        }
                     }
                 }
                 item {
@@ -149,7 +151,7 @@ private fun SettingsScreen(
                             "Widget background: ${(s.backgroundOpacity * 100).roundToInt()}%",
                             s.backgroundOpacity,
                             0f..1f,
-                            OPACITY_STEPS,
+                            OPACITY_SLIDER_STEPS,
                         ) { v ->
                             edit { it.copy(backgroundOpacity = v) }
                         }
@@ -163,8 +165,8 @@ private fun SettingsScreen(
                         SliderRow(
                             "Days ahead: ${s.daysAhead}",
                             s.daysAhead.toFloat(),
-                            1f..MAX_DAYS.toFloat(),
-                            MAX_DAYS - 2,
+                            1f..MAX_DAYS_AHEAD.toFloat(),
+                            MAX_DAYS_AHEAD - 2,
                         ) { v ->
                             edit { it.copy(daysAhead = v.toInt()) }
                         }
@@ -190,16 +192,16 @@ private fun SettingsScreen(
                             SliderRow(
                                 "Keep visible for ${s.hideOffsetMinutes} min after the end",
                                 s.hideOffsetMinutes.toFloat(),
-                                0f..MAX_OFFSET.toFloat(),
-                            ) { v -> edit { it.copy(hideOffsetMinutes = (v / STEP).toInt() * STEP) } }
+                                0f..MAX_OFFSET_MINUTES.toFloat(),
+                            ) { v -> edit { it.copy(hideOffsetMinutes = v.snapTo(OFFSET_STEP_MINUTES)) } }
                         }
                         SwitchRow("Dim events after they end", s.dimFinished) { v -> edit { it.copy(dimFinished = v) } }
                         if (s.dimFinished) {
                             SliderRow(
                                 "Dim ${s.dimOffsetMinutes} min after the end",
                                 s.dimOffsetMinutes.toFloat(),
-                                0f..MAX_OFFSET.toFloat(),
-                            ) { v -> edit { it.copy(dimOffsetMinutes = (v / STEP).toInt() * STEP) } }
+                                0f..MAX_OFFSET_MINUTES.toFloat(),
+                            ) { v -> edit { it.copy(dimOffsetMinutes = v.snapTo(OFFSET_STEP_MINUTES)) } }
                         }
                     }
                 }
@@ -221,7 +223,7 @@ private fun SettingsScreen(
                                 style = MaterialTheme.typography.labelLarge,
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                             )
-                            state.merges.take(MAX_PREVIEW).forEach { m ->
+                            state.merges.take(MAX_MERGES_SHOWN).forEach { m ->
                                 Text(
                                     "${m.kept.title}  (hid: ${m.dropped.joinToString { it.title }})",
                                     style = MaterialTheme.typography.bodySmall,
@@ -236,14 +238,17 @@ private fun SettingsScreen(
     }
 }
 
-private const val MAX_PREVIEW = 10
-private const val STEP = 5
-private const val MAX_OFFSET = 240
-private const val MAX_DAYS = 14
-private const val OPACITY_STEPS = 9
-private const val MAX_RADIUS = 32
-private const val RADIUS_STEP = 4
-private const val NO_LIMIT = 11
+// Slider limits for the settings below. Slider "steps" count the stops between the two ends.
+private const val MAX_MERGES_SHOWN = 10
+private const val OFFSET_STEP_MINUTES = 5
+private const val MAX_OFFSET_MINUTES = 240
+private const val MAX_DAYS_AHEAD = 14
+private const val OPACITY_SLIDER_STEPS = 9
+private const val MAX_CORNER_RADIUS = 32
+private const val CORNER_RADIUS_STEP = 4
+
+// The events-per-day slider ends at this value, which stands for "no limit" (stored as 0).
+private const val EVENTS_SLIDER_MAX = 11
 private const val MIN_DATE_WIDTH = 40
 private const val MAX_DATE_WIDTH = 72
 private const val DATE_STEP = 4
@@ -261,3 +266,6 @@ private fun PermissionCard(onResult: () -> Unit) {
         }
     }
 }
+
+/** Rounds down to a multiple of [step], so a smooth slider moves in fixed jumps. */
+private fun Float.snapTo(step: Int): Int = toInt() / step * step

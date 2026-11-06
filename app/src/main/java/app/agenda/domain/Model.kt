@@ -83,6 +83,12 @@ data class AgendaSettings(
     val tapToJoin: Boolean = true,
 )
 
+/** Copy with the calendars in [ids] shown or hidden. */
+fun AgendaSettings.withCalendarsShown(
+    ids: Set<Long>,
+    show: Boolean,
+) = copy(hiddenCalendarIds = if (show) hiddenCalendarIds - ids else hiddenCalendarIds + ids)
+
 /** One-tap bundles of the look settings; everything else is left alone. */
 enum class Preset(val label: String, val apply: (AgendaSettings) -> AgendaSettings) {
     CARDS("Cards", {

@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import app.agenda.domain.AgendaSettings
 import app.agenda.domain.CalInfo
+import app.agenda.domain.withCalendarsShown
 
 @Composable
 internal fun AccountGroup(
@@ -45,11 +46,7 @@ internal fun AccountGroup(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 AgendaSwitch(shown > 0) { show ->
                     val ids = cals.map { it.id }.toSet()
-                    edit {
-                        it.copy(
-                            hiddenCalendarIds = if (show) it.hiddenCalendarIds - ids else it.hiddenCalendarIds + ids,
-                        )
-                    }
+                    edit { it.withCalendarsShown(ids, show) }
                 }
                 Icon(
                     if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
@@ -74,11 +71,7 @@ internal fun CalendarRow(
         headlineContent = { Text(cal.name) },
         trailingContent = {
             AgendaSwitch(cal.id !in s.hiddenCalendarIds) { show ->
-                edit {
-                    it.copy(
-                        hiddenCalendarIds = if (show) it.hiddenCalendarIds - cal.id else it.hiddenCalendarIds + cal.id,
-                    )
-                }
+                edit { it.withCalendarsShown(setOf(cal.id), show) }
             }
         },
     )

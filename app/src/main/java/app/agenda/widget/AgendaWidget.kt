@@ -294,6 +294,41 @@ private fun AddButton() {
     }
 }
 
+/**
+ * The events of one day, shared by both layouts: an "empty day" note, the events (capped by the max-per-day setting),
+ * and a "+N more" link. The layouts differ only in padding and in how one event is drawn ([event]).
+ */
+@Composable
+private fun DayEvents(
+    row: DayRow,
+    today: LocalDate,
+    zone: ZoneId,
+    settings: AgendaSettings,
+    emptyPadding: GlanceModifier,
+    morePadding: GlanceModifier,
+    event: @Composable (CalEvent) -> Unit,
+) {
+    if (row.events.isEmpty()) {
+        Text(
+            text = if (row.date == today) "Nothing else today" else "No events",
+            modifier = emptyPadding,
+            style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = sz(13)),
+        )
+    }
+    val shown = if (settings.maxEventsPerDay > 0) row.events.take(settings.maxEventsPerDay) else row.events
+    shown.chunked(EVENTS_PER_COLUMN).forEach { chunk ->
+        Column(modifier = GlanceModifier.fillMaxWidth()) { chunk.forEach { event(it) } }
+    }
+    val hidden = row.events.size - shown.size
+    if (hidden > 0) {
+        Text(
+            text = "+$hidden more",
+            modifier = morePadding.clickable(openCalendar(row.startMillis(zone))),
+            style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = sz(12)),
+        )
+    }
+}
+
 @Composable
 private fun ListDaySection(
     context: Context,
@@ -336,30 +371,14 @@ private fun ListDaySection(
             )
             if (first) AddButton()
         }
-        if (row.events.isEmpty()) {
-            Text(
-                text = if (row.date == today) "Nothing else today" else "No events",
-                modifier = GlanceModifier.padding(vertical = settings.density.gap.dp),
-                style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = sz(13)),
-            )
-        }
-        val shown = if (settings.maxEventsPerDay > 0) row.events.take(settings.maxEventsPerDay) else row.events
-        shown.chunked(EVENTS_PER_COLUMN).forEach { chunk ->
-            Column(modifier = GlanceModifier.fillMaxWidth()) {
-                chunk.forEach { ListEvent(context, it, row.date, settings) }
-            }
-        }
-        val hidden = row.events.size - shown.size
-        if (hidden > 0) {
-            Text(
-                text = "+$hidden more",
-                modifier =
-                    GlanceModifier
-                        .padding(vertical = settings.density.gap.dp)
-                        .clickable(openCalendar(row.startMillis(zone))),
-                style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = sz(12)),
-            )
-        }
+        DayEvents(
+            row = row,
+            today = today,
+            zone = zone,
+            settings = settings,
+            emptyPadding = GlanceModifier.padding(vertical = settings.density.gap.dp),
+            morePadding = GlanceModifier.padding(vertical = settings.density.gap.dp),
+        ) { ListEvent(context, it, row.date, settings) }
     }
 }
 
@@ -542,30 +561,14 @@ private fun DaySection(
         }
         Spacer(GlanceModifier.width(8.dp))
         Column(modifier = GlanceModifier.defaultWeight()) {
-            if (row.events.isEmpty()) {
-                Text(
-                    text = if (row.date == today) "Nothing else today" else "No events",
-                    modifier = GlanceModifier.padding(vertical = 8.dp),
-                    style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = sz(13)),
-                )
-            }
-            val shown = if (settings.maxEventsPerDay > 0) row.events.take(settings.maxEventsPerDay) else row.events
-            shown.chunked(EVENTS_PER_COLUMN).forEach { chunk ->
-                Column(modifier = GlanceModifier.fillMaxWidth()) {
-                    chunk.forEach { EventCard(context, it, row.date, settings) }
-                }
-            }
-            val hidden = row.events.size - shown.size
-            if (hidden > 0) {
-                Text(
-                    text = "+$hidden more",
-                    modifier =
-                        GlanceModifier
-                            .padding(bottom = settings.density.gap.dp)
-                            .clickable(openCalendar(row.startMillis(zone))),
-                    style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = sz(12)),
-                )
-            }
+            DayEvents(
+                row = row,
+                today = today,
+                zone = zone,
+                settings = settings,
+                emptyPadding = GlanceModifier.padding(vertical = 8.dp),
+                morePadding = GlanceModifier.padding(bottom = settings.density.gap.dp),
+            ) { EventCard(context, it, row.date, settings) }
         }
     }
 }
