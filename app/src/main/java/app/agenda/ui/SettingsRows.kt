@@ -125,6 +125,7 @@ internal fun SliderRow(
 internal inline fun <reified T : Enum<T>> EnumChoice(
     label: String,
     selected: T,
+    crossinline name: (T) -> String = { it.name.lowercase().replaceFirstChar { c -> c.uppercase() } },
     crossinline onChange: (T) -> Unit,
 ) {
     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -137,7 +138,7 @@ internal inline fun <reified T : Enum<T>> EnumChoice(
                     shape = SegmentedButtonDefaults.itemShape(i, enumValues<T>().size),
                     // The check icon eats the width long labels like "Comfortable" need.
                     icon = {},
-                ) { Text(mode.name.lowercase().replaceFirstChar { it.uppercase() }, fontSize = 13.sp, maxLines = 1) }
+                ) { Text(name(mode), fontSize = 13.sp, maxLines = 1) }
             }
         }
     }

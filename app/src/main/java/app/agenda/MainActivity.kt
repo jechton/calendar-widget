@@ -32,8 +32,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.agenda.domain.AgendaSettings
+import app.agenda.domain.DayLabel
 import app.agenda.domain.Preset
-import app.agenda.domain.WidgetLayout
+import app.agenda.domain.TimePosition
 import app.agenda.ui.AccountGroup
 import app.agenda.ui.AgendaTheme
 import app.agenda.ui.EnumChoice
@@ -108,8 +109,13 @@ private fun SettingsScreen(
                 }
                 item {
                     Section("Layout") {
-                        EnumChoice("Layout", s.layout) { l -> edit { it.copy(layout = l) } }
-                        if (s.layout == WidgetLayout.LIST) {
+                        EnumChoice("Day label", s.dayLabel, { it.label }) { v -> edit { it.copy(dayLabel = v) } }
+                        EnumChoice("Event look", s.eventLook, { it.label }) { v -> edit { it.copy(eventLook = v) } }
+                        EnumChoice("Time", s.timePosition, { it.label }) { v -> edit { it.copy(timePosition = v) } }
+                        if (s.dayLabel == DayLabel.HEADING) {
+                            SwitchRow("Lines between days", s.dayDividers) { v -> edit { it.copy(dayDividers = v) } }
+                        }
+                        if (s.timePosition == TimePosition.LEFT) {
                             SwitchRow("Always show end times", s.alwaysShowEndTime) { v ->
                                 edit { it.copy(alwaysShowEndTime = v) }
                             }
@@ -121,17 +127,17 @@ private fun SettingsScreen(
                             0f..MAX_CORNER_RADIUS.toFloat(),
                             MAX_CORNER_RADIUS / CORNER_RADIUS_STEP - 1,
                         ) { v -> edit { it.copy(cornerRadius = v.roundToInt()) } }
-                        if (s.layout == WidgetLayout.CARDS) {
+                        if (s.dayLabel == DayLabel.SIDE) {
                             SliderRow(
                                 "Date column width: ${s.dateColumnWidth} dp",
                                 s.dateColumnWidth.toFloat(),
                                 MIN_DATE_WIDTH.toFloat()..MAX_DATE_WIDTH.toFloat(),
                                 (MAX_DATE_WIDTH - MIN_DATE_WIDTH) / DATE_STEP - 1,
                             ) { v -> edit { it.copy(dateColumnWidth = v.roundToInt()) } }
-                            SwitchRow("Title and time on one line", s.singleLineCards) { v ->
-                                edit { it.copy(singleLineCards = v) }
-                            }
                         }
+                        val left = s.timePosition == TimePosition.LEFT
+                        val oneLine = if (left) "Hide the second line" else "Title and time on one line"
+                        SwitchRow(oneLine, s.singleLineCards) { v -> edit { it.copy(singleLineCards = v) } }
                         SliderRow(
                             "Events per day: ${if (s.maxEventsPerDay == 0) "no limit" else s.maxEventsPerDay}",
                             (if (s.maxEventsPerDay == 0) EVENTS_SLIDER_MAX else s.maxEventsPerDay).toFloat(),

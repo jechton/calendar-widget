@@ -33,7 +33,19 @@ enum class Density(val outer: Int, val gap: Int, val cardPad: Int) {
     SPACIOUS(16, 8, 12),
 }
 
-/** CARDS: coloured cards beside a date column. LIST: day headings with dividers and a colour stripe per event. */
+/** Where the day is written: a column beside its events, or a heading line above them. */
+@Serializable
+enum class DayLabel(val label: String) { SIDE("Date column"), HEADING("Heading") }
+
+/** How an event is coloured: its whole row filled, or a thin stripe at the left. */
+@Serializable
+enum class EventLook(val label: String) { SOLID("Solid fill"), STRIPE("Stripe") }
+
+/** Where the start time goes: in front of the title, or in a line under it. */
+@Serializable
+enum class TimePosition(val label: String) { LEFT("Left of title"), SECOND_LINE("Second line") }
+
+/** The old two-way layout switch, kept only so saved settings can be converted. See [migrated]. */
 @Serializable
 enum class WidgetLayout { CARDS, LIST }
 
@@ -62,13 +74,19 @@ data class AgendaSettings(
     val backgroundOpacity: Float = 1f,
     /** Widget corner radius in dp; event cards and the today pill follow it. */
     val cornerRadius: Int = 24,
-    val layout: WidgetLayout = WidgetLayout.CARDS,
-    /** List layout: show "10:30 – 11:30 AM" instead of just the start time. */
+    val dayLabel: DayLabel = DayLabel.SIDE,
+    val eventLook: EventLook = EventLook.SOLID,
+    val timePosition: TimePosition = TimePosition.SECOND_LINE,
+    /** A thin line between days. Only drawn when [dayLabel] is HEADING. */
+    val dayDividers: Boolean = false,
+    /** Read from old saved settings, converted by [migrated], then cleared. Never set by new code. */
+    val layout: WidgetLayout? = null,
+    /** Time on the left: show "10:30 – 11:30 AM" instead of just the start time. */
     val alwaysShowEndTime: Boolean = false,
     val density: Density = Density.COMFORTABLE,
     /** 0 shows every event of a day. */
     val maxEventsPerDay: Int = 0,
-    /** Title and time on one line instead of two. */
+    /** Time on the second line: put it beside the title instead. Time on the left: drop the second line. */
     val singleLineCards: Boolean = false,
     /** Width in dp of the weekday and date column. */
     val dateColumnWidth: Int = 48,
@@ -89,11 +107,25 @@ fun AgendaSettings.withCalendarsShown(
     show: Boolean,
 ) = copy(hiddenCalendarIds = if (show) hiddenCalendarIds - ids else hiddenCalendarIds + ids)
 
-/** One-tap bundles of the look settings; everything else is left alone. */
+/** Turns a saved old-style [AgendaSettings.layout] into the four separate choices that replaced it. */
+fun AgendaSettings.migrated(): AgendaSettings =
+    when (layout) {
+        null -> this
+        WidgetLayout.CARDS -> Preset.GOOGLE.apply(this).copy(layout = null)
+        WidgetLayout.LIST -> Preset.SAMSUNG.apply(this).copy(layout = null)
+    }
+
+/**
+ * One-tap bundles of the look settings; everything else is left alone. A preset is only a starting point:
+ * changing any single choice afterwards just gives you your own mix.
+ */
 enum class Preset(val label: String, val apply: (AgendaSettings) -> AgendaSettings) {
-    CARDS("Cards", {
+    GOOGLE("Google", {
         it.copy(
-            layout = WidgetLayout.CARDS,
+            dayLabel = DayLabel.SIDE,
+            eventLook = EventLook.SOLID,
+            timePosition = TimePosition.SECOND_LINE,
+            dayDividers = false,
             density = Density.COMFORTABLE,
             cornerRadius = 24,
             maxEventsPerDay = 0,
@@ -104,33 +136,16 @@ enum class Preset(val label: String, val apply: (AgendaSettings) -> AgendaSettin
     }),
     SAMSUNG("Samsung", {
         it.copy(
-            layout = WidgetLayout.LIST,
+            dayLabel = DayLabel.HEADING,
+            eventLook = EventLook.STRIPE,
+            timePosition = TimePosition.LEFT,
+            dayDividers = true,
             density = Density.COMFORTABLE,
             cornerRadius = 20,
             maxEventsPerDay = 0,
             singleLineCards = false,
             alwaysShowEndTime = false,
             backgroundOpacity = 1f,
-        )
-    }),
-    COMPACT("Compact", {
-        it.copy(
-            layout = WidgetLayout.LIST,
-            density = Density.COMPACT,
-            cornerRadius = 12,
-            maxEventsPerDay = 3,
-            singleLineCards = true,
-            backgroundOpacity = 1f,
-        )
-    }),
-    GLASS("Glass", {
-        it.copy(
-            layout = WidgetLayout.LIST,
-            density = Density.COMFORTABLE,
-            cornerRadius = 28,
-            maxEventsPerDay = 0,
-            singleLineCards = false,
-            backgroundOpacity = 0.4f,
         )
     }),
 }
