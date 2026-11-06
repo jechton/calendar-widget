@@ -28,7 +28,7 @@ Reads the calendars already on the phone (Google, Samsung, etc.), so there is no
 - Presets Google and Samsung are starting points; change any choice and it becomes your own mix
 - Light, dark or system theme, background opacity, corner radius, spacing, text size, date column width
 - Events per day limit, one-line cards, optional end times, week labels, description line
-- Live preview in the settings screen over your wallpaper
+- Live preview in the settings screen, optionally over an image you pick
 
 **Use**
 

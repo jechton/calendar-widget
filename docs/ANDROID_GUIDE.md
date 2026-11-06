@@ -18,8 +18,7 @@ Each is declared in `app/src/main/AndroidManifest.xml`, the app's table of conte
 The process can be killed at any time and restarted for a single event. So nothing important lives only in memory.
 Settings go to disk (`SettingsStore`), and timed work goes to WorkManager (section 6).
 
-Also in the manifest: `READ_CALENDAR`, the one **permission**. Android makes the user approve it at runtime.
-`PermissionCard` in `MainActivity.kt` asks, and `CalendarRepository.hasPermission()` checks.
+Also in the manifest: `READ_CALENDAR`, the one **permission**. Android makes the user approve it at runtime. `PermissionCard` in `MainActivity.kt` asks (and after "don't ask again" links to app settings), and `CalendarRepository.hasPermission()` checks. The settings preview background uses the photo picker (`ui/PreviewBackground.kt`), which needs no permission.
 
 ## 2. Two UI toolkits, one look
 

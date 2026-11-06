@@ -24,12 +24,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.graphics.drawable.toBitmap
 import androidx.core.view.children
 import androidx.glance.ExperimentalGlanceApi
 import androidx.glance.appwidget.AppWidgetId
@@ -43,16 +43,13 @@ import app.agenda.widget.PREVIEW_ROWS
 @Composable
 internal fun WidgetPreview(
     settings: AgendaSettings,
+    wallpaper: ImageBitmap?,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    // lazy: needs storage permission on some Android versions; falls back to a gradient so transparency still shows.
-    val wallpaper =
-        remember {
-            runCatching { WallpaperManager.getInstance(context).drawable?.toBitmap()?.asImageBitmap() }.getOrNull()
-        }
     // Needs no permission (API 27+): the wallpaper's own palette stands in when the image itself is unreadable.
-    val backdrop = remember { wallpaperGradient(context) }
+    // Dimmed toward a dark base so a loud palette can't wash out the widget's light text.
+    val backdrop = remember { wallpaperGradient(context).map { lerp(it, DIM, 0.7f) } }
     val views by produceState<RemoteViews?>(null, settings) {
         AgendaWidget(preview = true).runComposition(context, AppWidgetId(PREVIEW_ID)).collect { value = it }
     }
@@ -101,6 +98,8 @@ private const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
 private const val PREVIEW_ID = -1
 
 private const val PREVIEW_HEIGHT = 260
+
+private val DIM = Color(0xFF14110F)
 
 private val FALLBACK_BACKDROP = listOf(Color(0xFF6A8CAF), Color(0xFFE0A96D))
 

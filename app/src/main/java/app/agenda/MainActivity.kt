@@ -1,9 +1,12 @@
 package app.agenda
 
 import android.Manifest
+import android.app.Activity
 import android.appwidget.AppWidgetManager
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -26,8 +29,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -38,6 +46,8 @@ import app.agenda.domain.TimePosition
 import app.agenda.ui.AccountGroup
 import app.agenda.ui.AgendaTheme
 import app.agenda.ui.EnumChoice
+import app.agenda.ui.PreviewBackground
+import app.agenda.ui.PreviewBackgroundRows
 import app.agenda.ui.RegexEditor
 import app.agenda.ui.Section
 import app.agenda.ui.SliderRow
@@ -62,8 +72,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             AgendaTheme {
                 val state by viewModel.state.collectAsStateWithLifecycle()
-                LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.reload() }
-                SettingsScreen(state, viewModel::edit, viewModel::reload)
+                val background = remember { PreviewBackground(applicationContext) }
+                LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                    viewModel.reload()
+                    background.reload()
+                }
+                SettingsScreen(state, background, viewModel::edit, viewModel::reload)
             }
         }
     }
@@ -78,6 +92,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun SettingsScreen(
     state: UiState,
+    background: PreviewBackground,
     edit: ((AgendaSettings) -> AgendaSettings) -> Unit,
     onPermission: () -> Unit,
 ) {
@@ -86,7 +101,7 @@ private fun SettingsScreen(
         TopAppBar(title = { Text("Agenda", style = MaterialTheme.typography.headlineSmall) })
     }) { padding ->
         Column(Modifier.padding(padding)) {
-            WidgetPreview(s, Modifier.padding(horizontal = 16.dp))
+            WidgetPreview(s, background.image, Modifier.padding(horizontal = 16.dp))
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(16.dp),
@@ -95,6 +110,7 @@ private fun SettingsScreen(
                 if (!state.permission) {
                     item { PermissionCard(onPermission) }
                 }
+                item { Section("Preview background") { PreviewBackgroundRows(background) } }
                 item {
                     Section("Presets") {
                         FlowRow(
@@ -259,15 +275,32 @@ private const val MIN_DATE_WIDTH = 40
 private const val MAX_DATE_WIDTH = 72
 private const val DATE_STEP = 4
 
+private const val CALENDAR = Manifest.permission.READ_CALENDAR
+
 @Composable
 private fun PermissionCard(onResult: () -> Unit) {
+    val context = LocalContext.current
+    // After "don't ask again" Android shows no dialog at all, so the button must lead to system settings instead.
+    var blocked by remember { mutableStateOf(false) }
     val launcher =
-        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { onResult() }
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            val canAskAgain = shouldShowRequestPermissionRationale(context as Activity, CALENDAR)
+            blocked = !granted && !canAskAgain
+            onResult()
+        }
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Agenda needs to read your calendars to fill the widget.")
-            FilledTonalButton(onClick = { launcher.launch(Manifest.permission.READ_CALENDAR) }) {
-                Text("Grant calendar access")
+            Text("Agenda only reads your calendars, on this phone, to fill the widget. Nothing leaves the device.")
+            if (blocked) {
+                Text("Calendar access was denied. Turn on Calendar under Permissions in app settings.")
+                FilledTonalButton(onClick = {
+                    val uri = Uri.parse("package:${context.packageName}")
+                    context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, uri))
+                }) { Text("Open app settings") }
+            } else {
+                FilledTonalButton(onClick = { launcher.launch(CALENDAR) }) {
+                    Text("Grant calendar access")
+                }
             }
         }
     }
